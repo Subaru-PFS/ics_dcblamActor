@@ -34,10 +34,6 @@ class DcbCmd(object):
 
     def status(self, cmd, channel=None):
         """Report status and version; obtain and send current data"""
-        # if not self.actor.initOk:
-        #     cmd.finish("text='Present and (probably) well'")
-        #     self.actor.initOk = 1
-        #     return
 
         config = self.actor.config
         options = config.options("address")

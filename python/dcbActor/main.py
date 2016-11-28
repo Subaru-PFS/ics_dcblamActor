@@ -3,7 +3,7 @@
 import socket
 import time
 from datetime import datetime as dt
-
+import dcbActor.bufferedSocket as bufferedSocket
 from actorcore.Actor import Actor
 
 
@@ -19,6 +19,8 @@ class DcbActor(Actor):
         self.tcpHost = self.config.get(name, 'tcp_host')
         self.tcpPort = int(self.config.get(name, 'tcp_port'))
         self.EOL = '\r\n'
+        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r\n>')
+
 
     def switch(self, cmd, channel, bool):
 
@@ -28,7 +30,7 @@ class DcbActor(Actor):
     def getStatus(self, cmd, channel):
 
         ret = self.sendOneCommand("read status o%s format" % channel.zfill(2), doClose=False, cmd=cmd)
-        return "on" if ' on' in ret else "off"
+        return "on" if ' on' in ret.split('\r\n')[1] else "off"
 
     def formatException(self, e, traceback=""):
 
@@ -138,16 +140,14 @@ class DcbActor(Actor):
     def getOneResponse(self, sock=None, cmd=None):
         if sock is None:
             sock = self.connectSock()
-        t0 = dt.now()
-        reply = sock.recv(1024)
 
-        while '\r\n>' not in reply:
-            if (dt.now() - t0).total_seconds() > 10:
-                raise Exception("timeout")
-            reply += sock.recv(1024)
+        ret = self.ioBuffer.getOneResponse(sock=sock, cmd=cmd)
+        reply = ret.strip()
 
-        #return reply.split('\r\n> \xff\xf1')[0].split(self.EOL)[1]
-        return reply.split('\r\n>')[0].split(self.EOL)[1]
+        self.logger.debug('received %r', reply)
+
+        return reply
+
 
 
 
