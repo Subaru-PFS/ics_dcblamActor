@@ -25,12 +25,18 @@ class DcbActor(Actor):
     def switch(self, cmd, channel, bool):
 
         address = self.config.get('address', channel)
-        return self.sendOneCommand("sw o%s %s" % (address.zfill(2), bool), doClose=False, cmd=cmd)
+        return self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=cmd)
 
     def getStatus(self, cmd, channel):
 
-        ret = self.sendOneCommand("read status o%s format" % channel.zfill(2), doClose=False, cmd=cmd)
-        return "on" if ' on' in ret.split('\r\n')[1] else "off"
+        address = self.config.get('address', channel)
+        ret = self.sendOneCommand("read status o%s format" % address.zfill(2), doClose=False, cmd=cmd)
+
+        if "pending" in ret:
+            time.sleep(1)
+            return self.getStatus(cmd, channel)
+        else:
+            return "on" if ' on' in ret.split('\r\n')[1] else "off"
 
     def formatException(self, e, traceback=""):
 
@@ -47,7 +53,7 @@ class DcbActor(Actor):
         if self.sock is None:
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(5.0)
+                s.settimeout(2.0)
             except Exception as e:
                 raise Exception("%s failed to create socket : %s" % (self.name, self.formatException(e)))
 

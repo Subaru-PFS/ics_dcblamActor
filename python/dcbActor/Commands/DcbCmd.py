@@ -37,30 +37,28 @@ class DcbCmd(object):
 
         config = self.actor.config
         options = config.options("address")
-        if channel is None:
-            for option in options:
-                try:
-                    channelNb = config.get("address", option)
-                    status = self.actor.getStatus(cmd, channelNb)
-                    cmd.inform("%s=%s" % (option, status))
-                except Exception as e:
-                    cmd.warn("text='getStatus %s has failed %s'" %
-                             (option, self.actor.formatException(e, sys.exc_info()[2])))
 
-            cmd.finish()
-        else:
-            cmd.finish(cmd.inform("%s=%s" % (channel, self.actor.getStatus(cmd, config.get("address", channel)))))
+        channels = [channel for channel in options] if channel is None else [channel]
+        for channel in channels:
+            try:
+                cmd.inform("%s=%s" % (channel, self.actor.getStatus(cmd, channel)))
+            except Exception as e:
+                cmd.warn("text='getStatus %s has failed %s'" % (channel,
+                                                                self.actor.formatException(e, sys.exc_info()[2])))
+        self.actor.closeSock()
+        cmd.finish()
 
 
     def switch(self, cmd):
         cmdKeys = cmd.cmd.keywords
         channel = cmdKeys["channel"].values[0]
+
         bool = "on" if "on" in cmdKeys else "off"
 
         try:
             ret = self.actor.switch(cmd, channel, bool)
+            self.status(cmd, channel)
         except Exception as e:
-            cmd.warn("text='switch %s has failed %s'" % (channel, self.actor.formatException(e, sys.exc_info()[2])))
-            self.actor.sock = None
+            cmd.fail("text='switch %s has failed %s'" % (channel, self.actor.formatException(e, sys.exc_info()[2])))
+            self.actor.closeSock()
 
-        self.status(cmd, channel)
