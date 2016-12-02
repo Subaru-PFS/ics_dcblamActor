@@ -1,165 +1,99 @@
 #!/usr/bin/env python
 
-import socket
-import time
-from datetime import datetime as dt
-import dcbActor.bufferedSocket as bufferedSocket
-from actorcore.Actor import Actor
+
+import ConfigParser
+import argparse
+import logging
+
+import actorcore.ICC
+from opscore.utility.qstr import qstr
+from twisted.internet import reactor
 
 
-class DcbActor(Actor):
-    def __init__(self, name, productName=None, configFile=None, debugLevel=30):
+class OurActor(actorcore.ICC.ICC):
+    def __init__(self, name, productName=None, configFile=None, logLevel=logging.INFO):
         # This sets up the connections to/from the hub, the logger, and the twisted reactor.
         #
-        self.initOk = 0
-        Actor.__init__(self, name,
-                       productName=productName,
-                       configFile=configFile)
-        self.sock = None
-        self.tcpHost = self.config.get(name, 'tcp_host')
-        self.tcpPort = int(self.config.get(name, 'tcp_port'))
-        self.EOL = '\r\n'
-        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r\n>')
+        actorcore.ICC.ICC.__init__(self, name,
+                                   productName=productName,
+                                   configFile=configFile)
+        self.logger.setLevel(logLevel)
 
+        self.everConnected = False
 
-    def switch(self, cmd, channel, bool):
+        self.monitors = dict()
 
-        address = self.config.get('address', channel)
-        return self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=cmd)
+        self.statusLoopCB = self.statusLoop
 
-    def getStatus(self, cmd, channel):
-
-        address = self.config.get('address', channel)
-        ret = self.sendOneCommand("read status o%s format" % address.zfill(2), doClose=False, cmd=cmd)
-
-        if "pending" in ret:
-            time.sleep(1)
-            return self.getStatus(cmd, channel)
-        else:
-            return "on" if ' on' in ret.split('\r\n')[1] else "off"
-
-    def formatException(self, e, traceback=""):
-
-        return "%s %s %s" % (str(type(e)).replace("'", ""), str(type(e)(*e.args)).replace("'", ""), traceback)
-
-    def connectSock(self, i=0):
-        """ Connect socket if self.sock is None
-
-        :param cmd : current command,
-        :return: sock in operation
-                 bsh simulator in simulation
-        """
-
-        if self.sock is None:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(2.0)
-            except Exception as e:
-                raise Exception("%s failed to create socket : %s" % (self.name, self.formatException(e)))
-
-            try:
-                s.connect((self.tcpHost, self.tcpPort))
-                time.sleep(0.1)
-                if s.recv(1024)[-7:] != "Login: ":
-                    if i > 2:
-                        raise Exception("weird")
-                    else:
-                        return self.connectSock(i + 1)
-                s.send("teladmin%s" % self.EOL)
-                time.sleep(0.1)
-                if s.recv(1024)[-10:] != "Password: ":
-                    if i > 2:
-                        raise Exception("bad login")
-                    else:
-                        return self.connectSock(i + 1)
-                s.send("pfsait%s" % self.EOL)
-                time.sleep(0.1)
-                if "Logged in successfully" not in s.recv(1024):
-                    if i > 2:
-                        raise Exception("bad password")
-                    else:
-                        return self.connectSock(i + 1)
-
-            except Exception as e:
-                raise Exception("%s failed to connect socket : %s" % (self.name, self.formatException(e)))
-
-            self.sock = s
-
-        return self.sock
-
-    def closeSock(self):
-        """ close socket
-
-        :param cmd : current command,
-        :return: sock in operation
-                 bsh simulator in simulation
-        """
-
-        if self.sock is not None:
-            try:
-                self.sock.close()
-
-            except Exception as e:
-                raise Exception("%s failed to close socket : %s" % (self.name, self.formatException(e)))
-
-        self.sock = None
-
-    def sendOneCommand(self, cmdStr, doClose=True, cmd=None):
-        """ Send one command and return one response.
-
-        Args
-        ----
-        cmdStr : str
-           The command to send.
-        doClose : bool
-           If True (the default), the device socket is closed before returning.
-
-        Returns
-        -------
-        str : the single response string, with EOLs stripped.
-
-        Raises
-        ------
-        IOError : from any communication errors.
-        """
-
-        if cmd is None:
-            cmd = self.bcast
-
-        fullCmd = "%s%s" % (cmdStr, self.EOL)
-        self.logger.debug('sending %r', fullCmd)
-
-        s = self.connectSock()
+    def reloadConfiguration(self, cmd):
+        logging.info("reading config file %s", self.configFile)
 
         try:
-            s.sendall(fullCmd)
+            newConfig = ConfigParser.ConfigParser()
+            newConfig.read(self.configFile)
+        except Exception, e:
+            if cmd:
+                cmd.fail('text=%s' % (qstr("failed to read the configuration file, old config untouched: %s" % (e))))
+            raise
 
-        except Exception as e:
-            raise Exception("%s failed to send %s : %s" % (self.name.upper(), fullCmd, self.formatException(e)))
+        self.config = newConfig
+        cmd.inform('sections=%08x,%r' % (id(self.config),
+                                         self.config))
 
-        reply = self.getOneResponse(sock=s, cmd=cmd)
-        if doClose:
-            self.closeSock()
+    def connectionMade(self):
+        if self.everConnected is False:
+            logging.info("Attaching Controllers")
+            self.allControllers = [s.strip() for s in self.config.get(self.name, 'startingControllers').split(',')]
+            self.attachAllControllers()
+            self.everConnected = True
+            logging.info("All Controllers started")
 
-        return reply
-
-    def getOneResponse(self, sock=None, cmd=None):
-        if sock is None:
-            sock = self.connectSock()
-
-        ret = self.ioBuffer.getOneResponse(sock=sock, cmd=cmd)
-        reply = ret.strip()
-
-        self.logger.debug('received %r', reply)
-
-        return reply
+    def attachController(self, controller, instanceName=None, cmd=None):
+        cmd = cmd if cmd is not None else self.bcast
+        actorcore.ICC.ICC.attachController(self, controller, instanceName)
 
 
+    def statusLoop(self, controller):
+        try:
+            self.callCommand("%s status" % (controller))
+        except:
+            pass
+
+        if self.monitors[controller] > 0:
+            reactor.callLater(self.monitors[controller],
+                              self.statusLoopCB,
+                              controller)
+
+    def monitor(self, controller, period, cmd=None):
+        if controller not in self.monitors:
+            self.monitors[controller] = 0
+
+        running = self.monitors[controller] > 0
+        self.monitors[controller] = period
+
+        if (not running) and period > 0:
+            cmd.warn('text="starting %gs loop for %s"' % (self.monitors[controller],
+                                                          controller))
+            self.statusLoopCB(controller)
+        else:
+            cmd.warn('text="adjusted %s loop to %gs"' % (controller, self.monitors[controller]))
 
 
 def main():
-    actor = DcbActor('dcb', productName='dcbActor')
-    actor.run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', default=None, type=str, nargs='?',
+                        help='configuration file to use')
+    parser.add_argument('--logLevel', default=logging.INFO, type=int, nargs='?',
+                        help='logging level')
+    parser.add_argument('--name', default='dcb', type=str, nargs='?',
+                        help='identity')
+    args = parser.parse_args()
+
+    theActor = OurActor('dcb',
+                        productName='dcbActor',
+                        configFile=args.config,
+                        logLevel=args.logLevel)
+    theActor.run()
 
 
 if __name__ == '__main__':

@@ -4,9 +4,10 @@ import sys
 
 import opscore.protocols.keys as keys
 import opscore.protocols.types as types
+from dcbActor.wrap import threaded
 
 
-class DcbCmd(object):
+class AtenCmd(object):
     def __init__(self, actor):
         # This lets us access the rest of the actor.
         self.actor = actor
@@ -16,22 +17,30 @@ class DcbCmd(object):
         # associated methods when matched. The callbacks will be
         # passed a single argument, the parsed and typed command.
         #
+        self.name = "aten"
         self.vocab = [
-            ('ping', '', self.ping),
-            ('status', '', self.status),
-            ('switch', '@(on|off) [<channel>]', self.switch),
+            (self.name, 'ping', self.ping),
+            (self.name, 'status', self.status),
+            (self.name, '@(switch) @(on|off) [<channel>]', self.switch),
         ]
 
         # Define typed command arguments for the above commands.
-        self.keys = keys.KeysDictionary("dcb_dcb", (1, 1),
+        self.keys = keys.KeysDictionary("dcb__aten", (1, 1),
                                         keys.Key("channel", types.String(), help="which channel to power on"),
-
                                         )
+
+    @property
+    def controller(self):
+        try:
+            return self.actor.controllers[self.name]
+        except KeyError:
+            raise RuntimeError('%s controller is not connected.' % (self.name))
 
     def ping(self, cmd):
         """Query the actor for liveness/happiness."""
         cmd.finish("text='Present and (probably) well'")
 
+    @threaded
     def status(self, cmd, channel=None):
         """Report status and version; obtain and send current data"""
 
@@ -41,14 +50,14 @@ class DcbCmd(object):
         channels = [channel for channel in options] if channel is None else [channel]
         for channel in channels:
             try:
-                cmd.inform("%s=%s" % (channel, self.actor.getStatus(cmd, channel)))
+                cmd.inform("%s=%s" % (channel, self.controller.getStatus(cmd, channel)))
             except Exception as e:
                 cmd.warn("text='getStatus %s has failed %s'" % (channel,
-                                                                self.actor.formatException(e, sys.exc_info()[2])))
-        self.actor.closeSock()
+                                                                self.controller.formatException(e, sys.exc_info()[2])))
+        self.controller.closeSock()
         cmd.finish()
 
-
+    @threaded
     def switch(self, cmd):
         cmdKeys = cmd.cmd.keywords
         channel = cmdKeys["channel"].values[0]
@@ -56,9 +65,9 @@ class DcbCmd(object):
         bool = "on" if "on" in cmdKeys else "off"
 
         try:
-            ret = self.actor.switch(cmd, channel, bool)
+            ret = self.controller.switch(cmd, channel, bool)
             self.status(cmd, channel)
         except Exception as e:
-            cmd.fail("text='switch %s has failed %s'" % (channel, self.actor.formatException(e, sys.exc_info()[2])))
-            self.actor.closeSock()
-
+            cmd.fail(
+                "text='switch %s has failed %s'" % (channel, self.controller.formatException(e, sys.exc_info()[2])))
+            self.controller.closeSock()
