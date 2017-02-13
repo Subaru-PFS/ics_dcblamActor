@@ -4,6 +4,7 @@ import time
 import dcbActor.Controllers.bufferedSocket as bufferedSocket
 from dcbActor.Controllers.device import Device
 import socket
+import sys
 
 class aten(Device):
     def __init__(self, actor, name, loglevel=logging.DEBUG):
@@ -24,16 +25,23 @@ class aten(Device):
         address = self.actor.config.get('address', channel)
         return self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=cmd)
 
-    def getStatus(self, cmd, channel):
+    def checkStatus(self, cmd, channel):
 
         address = self.actor.config.get('address', channel)
         ret = self.sendOneCommand("read status o%s format" % address.zfill(2), doClose=False, cmd=cmd)
 
         if "pending" in ret:
             time.sleep(1)
-            return self.getStatus(cmd, channel)
+            return self.checkStatus(cmd, channel)
         else:
             return "on" if ' on' in ret.split('\r\n')[1] else "off"
+
+    def getStatus(self, cmd, channels):
+        for channel in channels:
+            try:
+                cmd.inform("%s=%s" % (channel, self.checkStatus(cmd, channel)))
+            except Exception as e:
+                cmd.warn("text='checkStatus %s has failed %s'" % (channel, self.formatException(e, sys.exc_info()[2])))
 
 
     def connectSock(self, i=0):

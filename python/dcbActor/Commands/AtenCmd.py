@@ -21,12 +21,13 @@ class AtenCmd(object):
         self.vocab = [
             (self.name, 'ping', self.ping),
             (self.name, 'status', self.status),
-            (self.name, '@(switch) @(on|off) [<channel>]', self.switch),
+            (self.name, '@(switch) @(on|off) @(<channel>|<channels>)', self.switch),
         ]
 
         # Define typed command arguments for the above commands.
         self.keys = keys.KeysDictionary("dcb__aten", (1, 1),
                                         keys.Key("channel", types.String(), help="which channel to power on"),
+                                        keys.Key("channels", types.String() * (1,), help="which channels to power on"),
                                         )
 
     @property
@@ -41,33 +42,39 @@ class AtenCmd(object):
         cmd.finish("text='Present and (probably) well'")
 
     @threaded
-    def status(self, cmd, channel=None):
+    def status(self, cmd):
         """Report status and version; obtain and send current data"""
 
         config = self.actor.config
         options = config.options("address")
 
-        channels = [channel for channel in options] if channel is None else [channel]
-        for channel in channels:
-            try:
-                cmd.inform("%s=%s" % (channel, self.controller.getStatus(cmd, channel)))
-            except Exception as e:
-                cmd.warn("text='getStatus %s has failed %s'" % (channel,
-                                                                self.controller.formatException(e, sys.exc_info()[2])))
+        channels = [channel for channel in options]
+
+        self.controller.getStatus(cmd, channels)
+
         self.controller.closeSock()
         cmd.finish()
 
     @threaded
     def switch(self, cmd):
         cmdKeys = cmd.cmd.keywords
-        channel = cmdKeys["channel"].values[0]
+
+        if "channels" in cmdKeys:
+            channels = cmdKeys["channels"].values
+        else:
+            channels = [cmdKeys["channel"].values[0]]
 
         bool = "on" if "on" in cmdKeys else "off"
 
-        try:
-            ret = self.controller.switch(cmd, channel, bool)
-            self.status(cmd, channel)
-        except Exception as e:
-            cmd.fail(
-                "text='switch %s has failed %s'" % (channel, self.controller.formatException(e, sys.exc_info()[2])))
-            self.controller.closeSock()
+        for channel in channels:
+            try:
+                ret = self.controller.switch(cmd, channel, bool)
+                self.controller.getStatus(cmd, [channel])
+            except Exception as e:
+                cmd.fail(
+                    "text='switch %s has failed %s'" % (channel, self.controller.formatException(e, sys.exc_info()[2])))
+                self.controller.closeSock()
+                return
+
+        self.controller.closeSock()
+        cmd.finish()
