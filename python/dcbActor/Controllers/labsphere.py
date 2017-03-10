@@ -1,8 +1,10 @@
 import logging
 import socket
 import time
+from datetime import datetime as dt
 
 import dcbActor.Controllers.bufferedSocket as bufferedSocket
+import numpy as np
 from dcbActor.Controllers.device import Device
 from dcbActor.Controllers.labsphere_drivers import LabsphereTalk
 
@@ -20,25 +22,42 @@ class labsphere(Device):
         self.host = self.actor.config.get('labsphere', 'host')
         self.port = int(self.actor.config.get('labsphere', 'port'))
 
+        self.resetValue()
+
+    def resetValue(self):
+
+        self.attenVal = np.nan
+        self.halogenBool = False
+        self.arrPhotodiode = []
+
     def switchAttenuator(self, cmd, value):
         labs = LabsphereTalk()
         for cmdStr, tempo in labs.Attenuator(value):
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
             time.sleep(tempo)
 
+        self.attenVal = value
+
     def switchHalogen(self, cmd, bool):
         labs = LabsphereTalk()
         self.sendOneCommand(labs.Lamp(bool), doClose=False, cmd=cmd)
+        self.halogenBool = bool
 
     def getStatus(self, cmd):
         labs = LabsphereTalk()
-        return self.sendOneCommand(labs.Read_Photodiode(), doClose=True, cmd=cmd)
+        flux = self.sendOneCommand(labs.Read_Photodiode(), doClose=True, cmd=cmd)
+        self.arrPhotodiode.append((dt.utcnow(), flux))
+        arrPhotodiode = [(date, val) for date, val in self.arrPhotodiode if (dt.now() - date).total_seconds() < 60]
+        self.arrPhotodiode = arrPhotodiode
+
+        return self.attenVal, self.halogenBool, flux
 
     def initialise(self, cmd):
         labs = LabsphereTalk()
         for cmdStr, tempo in labs.LabSphere_init():
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
             time.sleep(tempo)
+
 
     def connectSock(self):
         """ Connect socket if self.sock is None

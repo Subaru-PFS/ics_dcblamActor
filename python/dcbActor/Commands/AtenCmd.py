@@ -78,3 +78,9 @@ class AtenCmd(object):
 
         self.controller.closeSock()
         cmd.finish()
+        if channels == ["pow_attenuator", "pow_sphere", "pow_halogen"]:
+            try:
+                self.actor.controllers['labsphere'].resetValue()
+                print "ok"
+            except:
+                pass

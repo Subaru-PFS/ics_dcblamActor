@@ -50,7 +50,7 @@ class LabsphereCmd(object):
         """Report status and version; obtain and send current data"""
 
         try:
-            val = self.controller.getStatus(cmd)
+            attenVal, halogenBool, val = self.controller.getStatus(cmd)
 
         except Exception as e:
             cmd.warn(
@@ -58,6 +58,8 @@ class LabsphereCmd(object):
             val = np.nan
             self.controller.closeSock()
 
+        cmd.inform("attenuator=%i" % attenVal)
+        cmd.inform("halogen=%s" % ("on" if halogenBool else "off"))
         cmd.finish("photodiode=%.3f" % float(val))
 
     def switchAttenuator(self, cmd):
@@ -67,7 +69,7 @@ class LabsphereCmd(object):
 
         try:
             ret = self.controller.switchAttenuator(cmd, value)
-            cmd.inform("attenuator=%i" % value)
+
             self.status(cmd)
         except Exception as e:
             cmd.fail("text='switch attenuator has failed %s'" % (self.controller.formatException(e, sys.exc_info()[2])))
@@ -89,7 +91,7 @@ class LabsphereCmd(object):
 
         try:
             ret = self.controller.switchHalogen(cmd, bool)
-            cmd.inform("halogen=%s" % ("on" if bool else "off"))
+
             self.status(cmd)
         except Exception as e:
             cmd.fail("text='switch halogen has failed %s'" % (self.controller.formatException(e, sys.exc_info()[2])))
