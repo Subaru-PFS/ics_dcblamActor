@@ -54,7 +54,7 @@ class labsphere(Device):
         arrPhotodiode = [(date, val) for date, val in self.arrPhotodiode if (dt.now() - date).total_seconds() < 60]
         self.arrPhotodiode = arrPhotodiode
 
-        cmd.inform("attenuator=%i" % self.attenVa)
+        cmd.inform("attenuator=%i" % self.attenVal)
         cmd.inform("halogen=%s" % ("on" if self.halogenBool else "off"))
         ender("photodiode=%.3f" % float(flux))
 
