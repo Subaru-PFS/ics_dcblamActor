@@ -2,9 +2,9 @@ import logging
 import socket
 import time
 from datetime import datetime as dt
-import numpy as np
-import dcbActor.Controllers.bufferedSocket as bufferedSocket
 
+import dcbActor.Controllers.bufferedSocket as bufferedSocket
+import numpy as np
 from dcbActor.Controllers.device import Device
 from dcbActor.Controllers.labsphere_drivers import LabsphereTalk
 
@@ -43,15 +43,20 @@ class labsphere(Device):
         self.sendOneCommand(labs.Lamp(bool), doClose=False, cmd=cmd)
         self.halogenBool = bool
 
-    def getStatus(self, cmd):
+    def getStatus(self, cmd, doFinish=False):
+        ender = cmd.finish if doFinish else cmd.inform
+
         labs = LabsphereTalk()
         flux = self.sendOneCommand(labs.Read_Photodiode(), doClose=True, cmd=cmd)
-        flux = flux if flux !='' else np.nan
+        flux = flux if flux != '' else np.nan
+
         self.arrPhotodiode.append((dt.utcnow(), float(flux)))
         arrPhotodiode = [(date, val) for date, val in self.arrPhotodiode if (dt.now() - date).total_seconds() < 60]
         self.arrPhotodiode = arrPhotodiode
 
-        return self.attenVal, self.halogenBool, flux
+        cmd.inform("attenuator=%i" % self.attenVa)
+        cmd.inform("halogen=%s" % ("on" if self.halogenBool else "off"))
+        ender("photodiode=%.3f" % float(flux))
 
     def initialise(self, cmd):
         labs = LabsphereTalk()

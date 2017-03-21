@@ -81,7 +81,7 @@ class OurActor(actorcore.ICC.ICC):
 
     def switchArc(self, cmd, arcLamp, attenVal):
         t0 = dt.now()
-        self.monitors["labsphere"] = 0
+
         cond = False
         self.controllers["labsphere"].switchAttenuator(cmd, attenVal)
 
@@ -94,7 +94,7 @@ class OurActor(actorcore.ICC.ICC):
         thFlux = {'ne': 4.0, 'hgar': 2.0, 'halogen': 5.5}
         self.controllers["labsphere"].arrPhotodiode = []
         while not cond:
-            attenVal, halogenBool, val = self.controllers["labsphere"].getStatus(cmd)
+            self.controllers["labsphere"].getStatus(cmd)
             arrPhotodiode = [val for date, val in self.controllers["labsphere"].arrPhotodiode]
 
             if len(arrPhotodiode) > 10 and np.mean(arrPhotodiode) > thFlux[arcLamp] and np.std(arrPhotodiode) < 0.05:
@@ -105,7 +105,6 @@ class OurActor(actorcore.ICC.ICC):
             if (dt.now() - t0).total_seconds() > 240:
                 raise Exception("Timeout switching Arc")
 
-        self.monitors["labsphere"] = 5
 
 def main():
     parser = argparse.ArgumentParser()

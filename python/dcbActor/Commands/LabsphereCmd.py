@@ -50,7 +50,7 @@ class LabsphereCmd(object):
         """Report status and version; obtain and send current data"""
 
         try:
-            attenVal, halogenBool, val = self.controller.getStatus(cmd)
+            self.controller.getStatus(cmd, doFinish=True)
 
         except Exception as e:
             cmd.warn(
@@ -58,9 +58,7 @@ class LabsphereCmd(object):
             val = np.nan
             self.controller.closeSock()
 
-        cmd.inform("attenuator=%i" % attenVal)
-        cmd.inform("halogen=%s" % ("on" if halogenBool else "off"))
-        cmd.finish("photodiode=%.3f" % float(val))
+
 
     def switchAttenuator(self, cmd):
         cmdKeys = cmd.cmd.keywords
