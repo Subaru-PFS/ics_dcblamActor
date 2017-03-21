@@ -4,7 +4,9 @@
 import ConfigParser
 import argparse
 import logging
-
+import time
+from datetime import datetime as dt
+import numpy as np
 import actorcore.ICC
 from opscore.utility.qstr import qstr
 from twisted.internet import reactor
@@ -52,7 +54,6 @@ class OurActor(actorcore.ICC.ICC):
         cmd = cmd if cmd is not None else self.bcast
         actorcore.ICC.ICC.attachController(self, controller, instanceName)
 
-
     def statusLoop(self, controller):
         try:
             self.callCommand("%s status" % (controller))
@@ -78,6 +79,33 @@ class OurActor(actorcore.ICC.ICC):
         else:
             cmd.warn('text="adjusted %s loop to %gs"' % (controller, self.monitors[controller]))
 
+    def switchArc(self, cmd, arcLamp, attenVal):
+        t0 = dt.now()
+        self.monitors["labsphere"] = 0
+        cond = False
+        self.controllers["labsphere"].switchAttenuator(cmd, attenVal)
+
+        if arcLamp in ['ne', 'hgar']:
+            ret = self.controllers["aten"].switch(cmd, arcLamp, "on")
+            self.controllers["aten"].getStatus(cmd, [arcLamp])
+        else:
+            self.controllers["labsphere"].switchHalogen(cmd, True)
+
+        thFlux = {'ne': 4.0, 'hgar': 2.0, 'halogen': 5.5}
+        self.controllers["labsphere"].arrPhotodiode = []
+        while not cond:
+            attenVal, halogenBool, val = self.controllers["labsphere"].getStatus(cmd)
+            arrPhotodiode = [val for date, val in self.controllers["labsphere"].arrPhotodiode]
+
+            if len(arrPhotodiode) > 10 and np.mean(arrPhotodiode) > thFlux[arcLamp] and np.std(arrPhotodiode) < 0.05:
+                cond = True
+            else:
+                time.sleep(5)
+
+            if (dt.now() - t0).total_seconds() > 240:
+                raise Exception("Timeout switching Arc")
+
+        self.monitors["labsphere"] = 5
 
 def main():
     parser = argparse.ArgumentParser()

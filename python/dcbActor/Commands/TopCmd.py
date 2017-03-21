@@ -23,6 +23,7 @@ class TopCmd(object):
             ('disconnect', '<controller>', self.disconnect),
             ('monitor', '<controllers> <period>', self.monitor),
             ('start', '', self.initControllers),
+            ('switch', '<arc> <attenuator>', self.switchArc),
         ]
 
         # Define typed command arguments for the above commands.
@@ -35,6 +36,11 @@ class TopCmd(object):
                                                  help='the names a controller.'),
                                         keys.Key("period", types.Int(),
                                                  help='the period to sample at.'),
+                                        keys.Key("arc", types.String(),
+                                                 help='which arc lamp to switch on.'),
+                                        keys.Key("attenuator", types.Int(),
+                                                 help='Attenuator value.'),
+
                                         )
 
     def monitor(self, cmd):
@@ -128,3 +134,22 @@ class TopCmd(object):
                 self.actor.callCommand("%s status" % (c))
 
         cmd.finish(self.controllerKey())
+
+
+    def switchArc(self, cmd):
+        cmdKeys = cmd.cmd.keywords
+        knownArc = ['halogen', 'ne', 'hgar']
+        found = False
+
+        attenVal = cmdKeys['attenuator'].values[0]
+        arcLamp = cmdKeys['arc'].values[0]
+        for arc in knownArc:
+            if arcLamp == arc:
+                found = True
+                break
+        if not found:
+            raise Exception("arc not in known arc")
+
+        self.actor.switchArc(cmd, arc, attenVal)
+
+        cmd.finish("text='switch %s ok'"%arc)

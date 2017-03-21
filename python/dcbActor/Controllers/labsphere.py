@@ -47,7 +47,7 @@ class labsphere(Device):
         labs = LabsphereTalk()
         flux = self.sendOneCommand(labs.Read_Photodiode(), doClose=True, cmd=cmd)
         flux = flux if flux !='' else np.nan
-        self.arrPhotodiode.append((dt.utcnow(), flux))
+        self.arrPhotodiode.append((dt.utcnow(), float(flux)))
         arrPhotodiode = [(date, val) for date, val in self.arrPhotodiode if (dt.now() - date).total_seconds() < 60]
         self.arrPhotodiode = arrPhotodiode
 
