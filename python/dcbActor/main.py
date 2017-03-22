@@ -91,13 +91,14 @@ class OurActor(actorcore.ICC.ICC):
         else:
             self.controllers["labsphere"].switchHalogen(cmd, True)
 
-        thFlux = {'ne': 4.0, 'hgar': 2.0, 'halogen': 5.5}
+        #thFlux = {'ne': 4.0, 'hgar': 2.0, 'halogen': 5.5}
+
         self.controllers["labsphere"].arrPhotodiode = []
         while not cond:
             self.controllers["labsphere"].getStatus(cmd)
             arrPhotodiode = [val for date, val in self.controllers["labsphere"].arrPhotodiode]
 
-            if len(arrPhotodiode) > 10 and np.mean(arrPhotodiode) > thFlux[arcLamp] and np.std(arrPhotodiode) < 0.05:
+            if len(arrPhotodiode) > 10 and np.std(arrPhotodiode) < 0.05:
                 cond = True
             else:
                 time.sleep(5)
