@@ -50,9 +50,8 @@ class AtenCmd(object):
 
         channels = [channel for channel in options]
 
-        self.controller.getStatus(cmd, channels)
+        self.controller.getStatus(cmd, channels, doClose=True)
 
-        self.controller.closeSock()
         cmd.finish()
 
     @threaded
@@ -69,18 +68,18 @@ class AtenCmd(object):
         for channel in channels:
             try:
                 ret = self.controller.switch(cmd, channel, bool)
-                self.controller.getStatus(cmd, [channel])
+
             except Exception as e:
                 cmd.fail(
                     "text='switch %s has failed %s'" % (channel, self.controller.formatException(e, sys.exc_info()[2])))
                 self.controller.closeSock()
                 return
 
-        self.controller.closeSock()
+        self.controller.getStatus(cmd, channels, doClose=True)
+
         cmd.finish()
         if channels == ["pow_attenuator", "pow_sphere", "pow_halogen"]:
             try:
                 self.actor.controllers['labsphere'].resetValue()
-                print "ok"
             except:
                 pass

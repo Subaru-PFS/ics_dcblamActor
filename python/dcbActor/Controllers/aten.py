@@ -36,13 +36,14 @@ class aten(Device):
         else:
             return "on" if ' on' in ret.split('\r\n')[1] else "off"
 
-    def getStatus(self, cmd, channels):
+    def getStatus(self, cmd, channels, doClose=False):
         for channel in channels:
             try:
                 cmd.inform("%s=%s" % (channel, self.checkStatus(cmd, channel)))
             except Exception as e:
                 cmd.warn("text='checkStatus %s has failed %s'" % (channel, self.formatException(e, sys.exc_info()[2])))
-
+        if doClose:
+            self.closeSock()
 
     def connectSock(self, i=0):
         """ Connect socket if self.sock is None

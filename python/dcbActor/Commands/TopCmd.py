@@ -138,7 +138,7 @@ class TopCmd(object):
 
     def switchArc(self, cmd):
         cmdKeys = cmd.cmd.keywords
-        knownArc = ['halogen', 'ne', 'hgar']
+        knownArc = ['halogen', 'ne', 'hgar', 'xenon']
         found = False
 
         attenVal = cmdKeys['attenuator'].values[0]

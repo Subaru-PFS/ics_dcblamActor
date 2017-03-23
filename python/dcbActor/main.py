@@ -85,9 +85,9 @@ class OurActor(actorcore.ICC.ICC):
         cond = False
         self.controllers["labsphere"].switchAttenuator(cmd, attenVal)
 
-        if arcLamp in ['ne', 'hgar']:
+        if arcLamp in ['ne', 'hgar', 'xenon']:
             ret = self.controllers["aten"].switch(cmd, arcLamp, "on")
-            self.controllers["aten"].getStatus(cmd, [arcLamp])
+            self.controllers["aten"].getStatus(cmd, [arcLamp], doClose=True)
         else:
             self.controllers["labsphere"].switchHalogen(cmd, True)
 
