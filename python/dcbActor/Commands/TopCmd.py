@@ -135,7 +135,6 @@ class TopCmd(object):
 
         cmd.finish(self.controllerKey())
 
-
     def switchArc(self, cmd):
         cmdKeys = cmd.cmd.keywords
         knownArc = ['halogen', 'ne', 'hgar', 'xenon']
@@ -147,9 +146,9 @@ class TopCmd(object):
             if arcLamp == arc:
                 found = True
                 break
-        if not found:
+        if found:
+            self.actor.switchArc(cmd, arc, attenVal)
+            cmd.finish("text='switch %s ok'" % arc)
+
+        else:
             raise Exception("arc not in known arc")
-
-        self.actor.switchArc(cmd, arc, attenVal)
-
-        cmd.finish("text='switch %s ok'"%arc)

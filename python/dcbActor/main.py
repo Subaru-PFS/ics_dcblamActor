@@ -6,8 +6,9 @@ import argparse
 import logging
 import time
 from datetime import datetime as dt
-import numpy as np
+
 import actorcore.ICC
+import numpy as np
 from opscore.utility.qstr import qstr
 from twisted.internet import reactor
 
@@ -26,6 +27,17 @@ class OurActor(actorcore.ICC.ICC):
         self.monitors = dict()
 
         self.statusLoopCB = self.statusLoop
+
+    @property
+    def arcState(self):
+        return {"ne": self.controllers["aten"].state["ne"],
+                "hgar": self.controllers["aten"].state["hgar"],
+                "xenon": self.controllers["aten"].state["xenon"],
+                "halogen": self.controllers["labsphere"].halogenBool}
+
+    @property
+    def arrPhotodiode(self):
+        return [val for date, val in self.controllers["labsphere"].arrPhotodiode]
 
     def reloadConfiguration(self, cmd):
         logging.info("reading config file %s", self.configFile)
@@ -81,24 +93,28 @@ class OurActor(actorcore.ICC.ICC):
 
     def switchArc(self, cmd, arcLamp, attenVal):
         t0 = dt.now()
-
         cond = False
-        self.controllers["labsphere"].switchAttenuator(cmd, attenVal)
 
-        if arcLamp in ['ne', 'hgar', 'xenon']:
-            ret = self.controllers["aten"].switch(cmd, arcLamp, "on")
-            self.controllers["aten"].getStatus(cmd, [arcLamp], doClose=True)
-        else:
-            self.controllers["labsphere"].switchHalogen(cmd, True)
+        if self.controllers["labsphere"].attenVal != attenVal:
+            self.controllers["labsphere"].switchAttenuator(cmd, attenVal)
+            cmd.inform("text='attenuator adjusted'")
 
-        #thFlux = {'ne': 4.0, 'hgar': 2.0, 'halogen': 5.5}
+        nextArcState = self.arcState
+        nextArcState[arcLamp] = True
 
-        self.controllers["labsphere"].arrPhotodiode = []
+        if nextArcState != self.arcState:
+
+            if arcLamp in ['ne', 'hgar', 'xenon']:
+                ret = self.controllers["aten"].switch(cmd, arcLamp, True)
+            else:
+                self.controllers["labsphere"].switchHalogen(cmd, True)
+
+            self.controllers["labsphere"].arrPhotodiode = []
+
         while not cond:
             self.controllers["labsphere"].getStatus(cmd)
-            arrPhotodiode = [val for date, val in self.controllers["labsphere"].arrPhotodiode]
 
-            if len(arrPhotodiode) > 10 and np.std(arrPhotodiode) < 0.05:
+            if len(self.arrPhotodiode) > 10 and np.mean(self.arrPhotodiode) > 0 and np.std(self.arrPhotodiode) < 0.05:
                 cond = True
             else:
                 time.sleep(5)

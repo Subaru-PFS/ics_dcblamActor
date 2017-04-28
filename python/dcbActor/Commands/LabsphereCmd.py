@@ -55,7 +55,7 @@ class LabsphereCmd(object):
         except Exception as e:
             cmd.warn(
                 "text='get photodiode value has failed %s'" % (self.controller.formatException(e, sys.exc_info()[2])))
-            val = np.nan
+
             self.controller.closeSock()
 
 

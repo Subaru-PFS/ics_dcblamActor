@@ -1,10 +1,12 @@
 __author__ = 'alefur'
 import logging
-import time
-import dcbActor.Controllers.bufferedSocket as bufferedSocket
-from dcbActor.Controllers.device import Device
 import socket
 import sys
+import time
+
+import dcbActor.Controllers.bufferedSocket as bufferedSocket
+from dcbActor.Controllers.device import Device
+
 
 class aten(Device):
     def __init__(self, actor, name, loglevel=logging.DEBUG):
@@ -12,13 +14,15 @@ class aten(Device):
         #
         Device.__init__(self, actor, name)
 
-
         self.sock = None
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r\n>')
         self.EOL = '\r\n'
 
         self.host = self.actor.config.get('aten', 'host')
         self.port = int(self.actor.config.get('aten', 'port'))
+        self.state = {}
+
+        self.actor.callCommand("%s status" % name)
 
     def switch(self, cmd, channel, bool):
 
@@ -39,7 +43,9 @@ class aten(Device):
     def getStatus(self, cmd, channels, doClose=False):
         for channel in channels:
             try:
-                cmd.inform("%s=%s" % (channel, self.checkStatus(cmd, channel)))
+                stat = self.checkStatus(cmd, channel)
+                self.state[channel] = True if stat == "on" else False
+                cmd.inform("%s=%s" % (channel, stat))
             except Exception as e:
                 cmd.warn("text='checkStatus %s has failed %s'" % (channel, self.formatException(e, sys.exc_info()[2])))
         if doClose:
