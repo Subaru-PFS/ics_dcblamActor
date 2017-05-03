@@ -23,7 +23,7 @@ class TopCmd(object):
             ('disconnect', '<controller>', self.disconnect),
             ('monitor', '<controllers> <period>', self.monitor),
             ('start', '', self.initControllers),
-            ('switch', '<arc> <attenuator>', self.switchArc),
+            ('switch', '<arc> [<attenuator>]', self.switchArc),
         ]
 
         # Define typed command arguments for the above commands.
@@ -140,7 +140,7 @@ class TopCmd(object):
         knownArc = ['halogen', 'ne', 'hgar', 'xenon']
         found = False
 
-        attenVal = cmdKeys['attenuator'].values[0]
+        attenVal = cmdKeys['attenuator'].values[0] if "attenuator" is cmdKeys else None
         arcLamp = cmdKeys['arc'].values[0]
         for arc in knownArc:
             if arcLamp == arc:

@@ -36,8 +36,12 @@ class OurActor(actorcore.ICC.ICC):
                 "halogen": self.controllers["labsphere"].halogenBool}
 
     @property
-    def arrPhotodiode(self):
-        return [val for date, val in self.controllers["labsphere"].arrPhotodiode]
+    def fluxStable(self):
+        arr = [val for date, val in self.controllers["labsphere"].arrPhotodiode]
+        if len(arr) > 10 and np.mean(arr) > 0 and np.std(arr) < 0.05:
+            return True
+        else:
+            return False
 
     def reloadConfiguration(self, cmd):
         logging.info("reading config file %s", self.configFile)
@@ -93,35 +97,31 @@ class OurActor(actorcore.ICC.ICC):
 
     def switchArc(self, cmd, arcLamp, attenVal):
         t0 = dt.now()
-        cond = False
+        empty = False
 
-        if self.controllers["labsphere"].attenVal != attenVal:
+        if attenVal is not None and self.controllers["labsphere"].attenVal != attenVal:
             self.controllers["labsphere"].switchAttenuator(cmd, attenVal)
+            empty = True
             cmd.inform("text='attenuator adjusted'")
 
         nextArcState = self.arcState
         nextArcState[arcLamp] = True
 
         if nextArcState != self.arcState:
-
             if arcLamp in ['ne', 'hgar', 'xenon']:
                 ret = self.controllers["aten"].switch(cmd, arcLamp, True)
             else:
                 self.controllers["labsphere"].switchHalogen(cmd, True)
+            empty = True
 
+        if empty:
             self.controllers["labsphere"].arrPhotodiode = []
 
-        while not cond:
+        while not self.fluxStable:
             self.controllers["labsphere"].getStatus(cmd)
-
-            if len(self.arrPhotodiode) > 10 and np.mean(self.arrPhotodiode) > 0 and np.std(self.arrPhotodiode) < 0.05:
-                cond = True
-            else:
-                time.sleep(5)
-
+            time.sleep(5)
             if (dt.now() - t0).total_seconds() > 240:
                 raise Exception("Timeout switching Arc")
-
 
 def main():
     parser = argparse.ArgumentParser()
