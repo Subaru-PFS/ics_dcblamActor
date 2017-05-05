@@ -38,7 +38,7 @@ class OurActor(actorcore.ICC.ICC):
     @property
     def fluxStable(self):
         arr = [val for date, val in self.controllers["labsphere"].arrPhotodiode]
-        if len(arr) > 10 and np.mean(arr) > 0 and np.std(arr) < 0.05:
+        if len(arr) > 10 and np.mean(arr) > 0.01 and np.std(arr) < 0.05:
             return True
         else:
             return False
@@ -109,7 +109,8 @@ class OurActor(actorcore.ICC.ICC):
 
         if nextArcState != self.arcState:
             if arcLamp in ['ne', 'hgar', 'xenon']:
-                ret = self.controllers["aten"].switch(cmd, arcLamp, True)
+                ret = self.controllers["aten"].switch(cmd, arcLamp, "on")
+                self.controllers["aten"].getStatus(cmd, [arcLamp], doClose=True)
             else:
                 self.controllers["labsphere"].switchHalogen(cmd, True)
             empty = True
@@ -120,7 +121,7 @@ class OurActor(actorcore.ICC.ICC):
         while not self.fluxStable:
             self.controllers["labsphere"].getStatus(cmd)
             time.sleep(5)
-            if (dt.now() - t0).total_seconds() > 240:
+            if (dt.now() - t0).total_seconds() > 300:
                 raise Exception("Timeout switching Arc")
 
 def main():
