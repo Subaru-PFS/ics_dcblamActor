@@ -40,7 +40,6 @@ class TopCmd(object):
                                                  help='which arc lamp to switch on.'),
                                         keys.Key("attenuator", types.Int(),
                                                  help='Attenuator value.'),
-
                                         )
 
     def monitor(self, cmd):
@@ -140,8 +139,9 @@ class TopCmd(object):
         knownArc = ['halogen', 'ne', 'hgar', 'xenon']
         found = False
 
-        attenVal = cmdKeys['attenuator'].values[0] if "attenuator" is cmdKeys else None
+        attenVal = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else None
         arcLamp = cmdKeys['arc'].values[0]
+        
         for arc in knownArc:
             if arcLamp == arc:
                 found = True
