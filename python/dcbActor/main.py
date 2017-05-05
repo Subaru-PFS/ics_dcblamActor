@@ -38,7 +38,7 @@ class OurActor(actorcore.ICC.ICC):
     @property
     def fluxStable(self):
         arr = [val for date, val in self.controllers["labsphere"].arrPhotodiode]
-        if len(arr) > 10 and np.mean(arr) > 0.01 and np.std(arr) < 0.05:
+        if len(arr) > 10 and np.mean(arr) > 0.002 and np.std(arr) < 0.05:
             return True
         else:
             return False
