@@ -19,7 +19,6 @@ class AtenCmd(object):
         #
         self.name = "aten"
         self.vocab = [
-            (self.name, 'ping', self.ping),
             (self.name, 'status', self.status),
             (self.name, '@(switch) @(on|off) @(<channel>|<channels>)', self.switch),
         ]
@@ -37,9 +36,6 @@ class AtenCmd(object):
         except KeyError:
             raise RuntimeError('%s controller is not connected.' % (self.name))
 
-    def ping(self, cmd):
-        """Query the actor for liveness/happiness."""
-        cmd.finish("text='Present and (probably) well'")
 
     @threaded
     def status(self, cmd):

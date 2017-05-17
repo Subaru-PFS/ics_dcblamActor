@@ -20,7 +20,6 @@ class LabsphereCmd(object):
         #
         self.name = "labsphere"
         self.vocab = [
-            (self.name, 'ping', self.ping),
             (self.name, 'status', self.status),
             (self.name, '<value>', self.switchAttenuator),
             (self.name, '@(switch) @(on|off)', self.switchHalogen),
@@ -40,10 +39,6 @@ class LabsphereCmd(object):
             return self.actor.controllers[self.name]
         except KeyError:
             raise RuntimeError('%s controller is not connected.' % (self.name))
-
-    def ping(self, cmd):
-        """Query the actor for liveness/happiness."""
-        cmd.finish("text='Present and (probably) well'")
 
     @threaded
     def status(self, cmd):

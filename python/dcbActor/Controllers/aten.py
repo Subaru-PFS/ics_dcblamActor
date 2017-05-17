@@ -48,8 +48,19 @@ class aten(Device):
                 cmd.inform("%s=%s" % (channel, stat))
             except Exception as e:
                 cmd.warn("text='checkStatus %s has failed %s'" % (channel, self.formatException(e, sys.exc_info()[2])))
+
+        v, a, w = self.checkVaw(cmd)
+        cmd.inform("aten_vaw=%s,%s,%s" % (v, a, w))
         if doClose:
             self.closeSock()
+
+    def checkVaw(self, cmd):
+
+        v = self.sendOneCommand('read meter dev volt simple', doClose=False, cmd=cmd)
+        a = self.sendOneCommand('read meter dev curr simple', doClose=False, cmd=cmd)
+        w = self.sendOneCommand('read meter dev pow simple', doClose=False, cmd=cmd)
+
+        return v.split('\r\n')[1].strip(), a.split('\r\n')[1].strip(), w.split('\r\n')[1].strip()
 
     def connectSock(self, i=0):
         """ Connect socket if self.sock is None
