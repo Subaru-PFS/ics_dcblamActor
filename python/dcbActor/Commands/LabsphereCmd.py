@@ -21,7 +21,7 @@ class LabsphereCmd(object):
         self.name = "labsphere"
         self.vocab = [
             (self.name, 'status', self.status),
-            (self.name, '<value>', self.switchAttenuator),
+            (self.name, '<attenuator>', self.switchAttenuator),
             (self.name, '@(switch) @(on|off)', self.switchHalogen),
             (self.name, 'init', self.initialise),
 
@@ -30,7 +30,7 @@ class LabsphereCmd(object):
         # Define typed command arguments for the above commands.
         self.keys = keys.KeysDictionary("dcb_labsphere", (1, 1),
                                         keys.Key("channel", types.String(), help="which channel to power on"),
-                                        keys.Key("value", types.Int(), help="attenuator value"),
+                                        keys.Key("attenuator", types.Int(), help="attenuator value"),
                                         )
 
     @property
@@ -58,7 +58,7 @@ class LabsphereCmd(object):
     def switchAttenuator(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
-        value = cmdKeys['value'].values[0]
+        value = cmdKeys['attenuator'].values[0]
 
         try:
             ret = self.controller.switchAttenuator(cmd, value)

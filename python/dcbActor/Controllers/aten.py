@@ -25,7 +25,7 @@ class aten(Device):
         self.actor.callCommand("%s status" % name)
 
     def switch(self, cmd, channel, bool):
-
+        bool = 'on' if bool else 'off'
         address = self.actor.config.get('address', channel)
         return self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=cmd)
 

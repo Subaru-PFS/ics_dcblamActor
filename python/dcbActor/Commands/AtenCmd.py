@@ -59,7 +59,7 @@ class AtenCmd(object):
         else:
             channels = [cmdKeys["channel"].values[0]]
 
-        bool = "on" if "on" in cmdKeys else "off"
+        bool = True if "on" in cmdKeys else False
 
         for channel in channels:
             try:

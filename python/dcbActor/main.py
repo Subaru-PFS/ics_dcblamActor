@@ -95,8 +95,7 @@ class OurActor(actorcore.ICC.ICC):
         else:
             cmd.warn('text="adjusted %s loop to %gs"' % (controller, self.monitors[controller]))
 
-    def switchArc(self, cmd, arcLamp, attenVal):
-        t0 = dt.now()
+    def switchArc(self, cmd, arcLamp, switchOn, attenVal):
         empty = False
 
         if attenVal is not None and self.controllers["labsphere"].attenVal != attenVal:
@@ -105,24 +104,32 @@ class OurActor(actorcore.ICC.ICC):
             cmd.inform("text='attenuator adjusted'")
 
         nextArcState = self.arcState
-        nextArcState[arcLamp] = True
+        nextArcState[arcLamp] = switchOn
 
         if nextArcState != self.arcState:
             if arcLamp in ['ne', 'hgar', 'xenon']:
-                ret = self.controllers["aten"].switch(cmd, arcLamp, "on")
+                ret = self.controllers["aten"].switch(cmd, arcLamp, switchOn)
                 self.controllers["aten"].getStatus(cmd, [arcLamp], doClose=True)
             else:
-                self.controllers["labsphere"].switchHalogen(cmd, True)
+                self.controllers["labsphere"].switchHalogen(cmd, switchOn)
             empty = True
 
         if empty:
             self.controllers["labsphere"].arrPhotodiode = []
 
+        if switchOn:
+            self.waitForFlux(cmd)
+
+        cmd.finish("text='%s ok'" %arcLamp)
+
+    def waitForFlux(self, cmd):
+        t0 = dt.now()
         while not self.fluxStable:
             self.controllers["labsphere"].getStatus(cmd)
             time.sleep(5)
             if (dt.now() - t0).total_seconds() > 300:
                 raise Exception("Timeout switching Arc")
+
 
 def main():
     parser = argparse.ArgumentParser()

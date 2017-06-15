@@ -23,7 +23,10 @@ class TopCmd(object):
             ('disconnect', '<controller>', self.disconnect),
             ('monitor', '<controllers> <period>', self.monitor),
             ('start', '', self.initControllers),
-            ('switch', '<arc> [<attenuator>]', self.switchArc),
+            ('halogen', '@(on|off) [<attenuator>]', self.halogen),
+            ('hgar', '@(on|off) [<attenuator>]', self.hgar),
+            ('neon', '@(on|off) [<attenuator>]', self.neon),
+            ('xenon', '@(on|off) [<attenuator>]', self.xenon),
         ]
 
         # Define typed command arguments for the above commands.
@@ -134,21 +137,34 @@ class TopCmd(object):
 
         cmd.finish(self.controllerKey())
 
-    def switchArc(self, cmd):
+    def halogen(self, cmd):
         cmdKeys = cmd.cmd.keywords
-        knownArc = ['halogen', 'ne', 'hgar', 'xenon']
-        found = False
-
+        arc = 'halogen'
+        switchOn = True if "on" in cmdKeys else False
         attenVal = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else None
-        arcLamp = cmdKeys['arc'].values[0]
-        
-        for arc in knownArc:
-            if arcLamp == arc:
-                found = True
-                break
-        if found:
-            self.actor.switchArc(cmd, arc, attenVal)
-            cmd.finish("text='switch %s ok'" % arc)
 
-        else:
-            raise Exception("arc not in known arc")
+        self.actor.switchArc(cmd, arc, switchOn, attenVal)
+
+    def hgar(self, cmd):
+        cmdKeys = cmd.cmd.keywords
+        arc = 'hgar'
+        switchOn = True if "on" in cmdKeys else False
+        attenVal = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else None
+
+        self.actor.switchArc(cmd, arc, switchOn, attenVal)
+
+    def neon(self, cmd):
+        cmdKeys = cmd.cmd.keywords
+        arc = 'ne'
+        switchOn = True if "on" in cmdKeys else False
+        attenVal = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else None
+
+        self.actor.switchArc(cmd, arc, switchOn, attenVal)
+
+    def xenon(self, cmd):
+        cmdKeys = cmd.cmd.keywords
+        arc = 'xenon'
+        switchOn = True if "on" in cmdKeys else False
+        attenVal = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else None
+
+        self.actor.switchArc(cmd, arc, switchOn, attenVal)
