@@ -6,11 +6,11 @@ class LabsphereTalk:
         s3 = "P1"
         i = 1
 
-        for l in s:
+        for l in reversed(s):
             if l == '0':
-                s3 += 'J'
-            else:
                 s3 += 'K'
+            else:
+                s3 += 'J'
             s3 += str(i)
             i += 1
 
