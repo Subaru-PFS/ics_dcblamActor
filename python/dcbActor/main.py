@@ -36,9 +36,12 @@ class OurActor(actorcore.ICC.ICC):
                 "halogen": self.controllers["labsphere"].halogenBool}
 
     @property
-    def fluxStable(self):
-        arr = [val for date, val in self.controllers["labsphere"].arrPhotodiode]
-        if len(arr) > 10 and np.mean(arr) > 0.002 and np.std(arr) < 0.05:
+    def flux(self):
+        return np.array([val for date, val in self.controllers["labsphere"].arrPhotodiode])
+
+    @property
+    def warmingUp(self):
+        if len(self.flux) > 10:
             return True
         else:
             return False
@@ -95,12 +98,11 @@ class OurActor(actorcore.ICC.ICC):
         else:
             cmd.warn('text="adjusted %s loop to %gs"' % (controller, self.monitors[controller]))
 
-    def switchArc(self, cmd, arcLamp, switchOn, attenVal):
+    def switchArc(self, cmd, arcLamp, switchOn, attenVal, force):
         empty = False
 
         if attenVal is not None and self.controllers["labsphere"].attenVal != attenVal:
             self.controllers["labsphere"].switchAttenuator(cmd, attenVal)
-            empty = True
             cmd.inform("text='attenuator adjusted'")
 
         nextArcState = self.arcState
@@ -118,18 +120,28 @@ class OurActor(actorcore.ICC.ICC):
             self.controllers["labsphere"].arrPhotodiode = []
 
         if switchOn:
-            self.waitForFlux(cmd)
+            self.waitForFlux(cmd, force)
 
-        cmd.finish("text='%s ok'" %arcLamp)
+        cmd.finish("text='%s ok'" % arcLamp)
 
-    def waitForFlux(self, cmd):
+    def waitForFlux(self, cmd, force):
         t0 = dt.now()
-        while not self.fluxStable:
+        self.monitor(controller="labsphere", period=0, cmd=cmd)
+
+        while not self.warmingUp:
             self.controllers["labsphere"].getStatus(cmd)
             time.sleep(5)
-            if (dt.now() - t0).total_seconds() > 300:
-                raise Exception("Timeout switching Arc")
+            cmd.inform("text='Warming up lamp'")
 
+        if not force:
+            while not (np.mean(self.flux) > 0.001 and np.std(self.flux) < 0.05):
+                self.controllers["labsphere"].getStatus(cmd)
+                time.sleep(5)
+                cmd.inform("text='Waiting photodiode flux to stabilise meanFlux=%.2f stdFlux=%.2f'" % (np.mean(self.flux), np.std(self.flux)))
+                if (dt.now() - t0).total_seconds() > 240:
+                    raise Exception('Timeout photodiode flux is null or unstable')
+
+        self.monitor(controller="labsphere", period=5, cmd=cmd)
 
 def main():
     parser = argparse.ArgumentParser()
