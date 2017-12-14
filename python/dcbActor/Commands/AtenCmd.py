@@ -20,7 +20,7 @@ class AtenCmd(object):
         self.name = "aten"
         self.vocab = [
             (self.name, 'status', self.status),
-            (self.name, '@(switch) @(on|off) @(<channel>|<channels>)', self.switch),
+            ('power', '@(on|off) @(<channel>|<channels>)', self.switch),
         ]
 
         # Define typed command arguments for the above commands.
