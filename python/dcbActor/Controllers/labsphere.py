@@ -26,6 +26,13 @@ class labsphere(Device):
 
         self.actor.callCommand("%s status" % name)
 
+    @property
+    def fluxmedian(self):
+        flux = np.array([val for date, val in self.arrPhotodiode])
+        fluxmedian = np.median(flux) if len(flux) > 10 else np.nan
+
+        return fluxmedian
+
     def resetValue(self):
 
         self.attenVal = -1
@@ -58,6 +65,7 @@ class labsphere(Device):
 
         cmd.inform("attenuator=%i" % self.attenVal)
         cmd.inform("halogen=%s" % ("on" if self.halogenBool else "off"))
+        cmd.inform("fluxmedian=%.3f" % self.fluxmedian)
         ender("photodiode=%.3f" % float(flux))
 
     def initialise(self, cmd):
