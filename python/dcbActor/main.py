@@ -28,6 +28,9 @@ class OurActor(actorcore.ICC.ICC):
 
         self.statusLoopCB = self.statusLoop
 
+        self.monitor(controller="labsphere", period=5)
+        self.monitor(controller="aten", period=60)
+
     @property
     def arcState(self):
         return {"ne": self.controllers["aten"].state["ne"],
@@ -74,17 +77,18 @@ class OurActor(actorcore.ICC.ICC):
         actorcore.ICC.ICC.attachController(self, controller, instanceName)
 
     def statusLoop(self, controller):
-        try:
-            self.callCommand("%s status" % (controller))
-        except:
-            pass
-
         if self.monitors[controller] > 0:
+            try:
+                self.callCommand("%s status" % (controller))
+            except:
+                pass
+
             reactor.callLater(self.monitors[controller],
                               self.statusLoopCB,
                               controller)
 
     def monitor(self, controller, period, cmd=None):
+        cmd = cmd if cmd is not None else self.bcast
         if controller not in self.monitors:
             self.monitors[controller] = 0
 
