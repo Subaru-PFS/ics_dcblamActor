@@ -36,6 +36,7 @@ class OurActor(actorcore.ICC.ICC):
         return {"ne": self.controllers["aten"].state["ne"],
                 "hgar": self.controllers["aten"].state["hgar"],
                 "xenon": self.controllers["aten"].state["xenon"],
+                "krypton": self.controllers["aten"].state["krypton"],
                 "halogen": self.controllers["labsphere"].halogenBool}
 
     @property
@@ -113,7 +114,7 @@ class OurActor(actorcore.ICC.ICC):
         nextArcState[arcLamp] = switchOn
 
         if nextArcState != self.arcState:
-            if arcLamp in ['ne', 'hgar', 'xenon']:
+            if arcLamp in ['ne', 'hgar', 'xenon', 'krypton']:
                 ret = self.controllers["aten"].switch(cmd, arcLamp, switchOn)
                 self.controllers["aten"].getStatus(cmd, [arcLamp], doClose=True)
             else:

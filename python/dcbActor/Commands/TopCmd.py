@@ -27,6 +27,7 @@ class TopCmd(object):
             ('hgar', '@(on|off) [<attenuator>] [force]', self.hgar),
             ('neon', '@(on|off) [<attenuator>] [force]', self.neon),
             ('xenon', '@(on|off) [<attenuator>] [force]', self.xenon),
+            ('krypton', '@(on|off) [<attenuator>] [force]', self.krypton),
         ]
 
         # Define typed command arguments for the above commands.
@@ -171,6 +172,16 @@ class TopCmd(object):
         cmdKeys = cmd.cmd.keywords
 
         arc = 'xenon'
+        switchOn = True if "on" in cmdKeys else False
+        force = True if 'force' in cmdKeys else False
+        attenVal = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else None
+
+        self.actor.switchArc(cmd, arc, switchOn, attenVal, force)
+
+    def krypton(self, cmd):
+        cmdKeys = cmd.cmd.keywords
+
+        arc = 'krypton'
         switchOn = True if "on" in cmdKeys else False
         force = True if 'force' in cmdKeys else False
         attenVal = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else None
