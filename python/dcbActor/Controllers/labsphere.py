@@ -1,12 +1,12 @@
 import logging
-import socket
 import time
 from datetime import datetime as dt
 
-import dcbActor.Controllers.bufferedSocket as bufferedSocket
+import enuActor.Controllers.bufferedSocket as bufferedSocket
 import numpy as np
-from dcbActor.Controllers.device import Device
 from dcbActor.Controllers.labsphere_drivers import LabsphereTalk
+from dcbActor.Controllers.simulator.labsim import Labspheresim
+from enuActor.Controllers.device import Device
 
 
 class labsphere(Device):
@@ -14,17 +14,59 @@ class labsphere(Device):
         # This sets up the connections to/from the hub, the logger, and the twisted reactor.
         #
         Device.__init__(self, actor, name)
+        self.sock = None
+        self.simulator = None
 
         self.EOL = ''
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r\n')
-        self.sock = None
-
-        self.host = self.actor.config.get('labsphere', 'host')
-        self.port = int(self.actor.config.get('labsphere', 'port'))
 
         self.resetValue()
 
-        self.actor.callCommand("%s status" % name)
+        #self.actor.callCommand("%s status" % name)
+
+    def loadCfg(self, cmd, mode=None):
+        """| Load Configuration file. called by device.loadDevice()
+
+        :param cmd: on going command
+        :param mode: operation|simulation, loaded from config file if None
+        :type mode: str
+        :raise: Exception Config file badly formatted
+        """
+
+        self.actor.reloadConfiguration(cmd=cmd)
+
+        self.host = self.actor.config.get('labsphere', 'host')
+        self.port = int(self.actor.config.get('labsphere', 'port'))
+        self.mode = self.actor.config.get('labsphere', 'mode')
+
+    def startCommunication(self, cmd):
+        """| Start socket with the interlock board or simulate it.
+        | Called by device.loadDevice()
+
+        :param cmd: on going command,
+        :raise: Exception if the communication has failed with the controller
+        """
+        self.simulator = Labspheresim(self.actor) if self.mode == "simulation" else None  # Create new simulator
+        s = self.connectSock()
+
+    def initialise(self, cmd):
+        """| Initialise the interlock board, called y device.initDevice().
+
+
+        :param cmd: on going command
+        :raise: Exception if a command fail, user if warned with error
+        """
+
+        labs = LabsphereTalk()
+        for cmdStr, tempo in labs.init():
+            self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
+            time.sleep(tempo)
+
+        for cmdStr, tempo in labs.fullOpen():
+            self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
+            time.sleep(tempo)
+
+        self.attenVal = 0
 
     @property
     def fluxmedian(self):
@@ -41,7 +83,7 @@ class labsphere(Device):
 
     def switchAttenuator(self, cmd, value):
         labs = LabsphereTalk()
-        for cmdStr, tempo in labs.Attenuator(value):
+        for cmdStr, tempo in labs.attenuator(value):
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
             time.sleep(tempo)
 
@@ -49,54 +91,28 @@ class labsphere(Device):
 
     def switchHalogen(self, cmd, bool):
         labs = LabsphereTalk()
-        self.sendOneCommand(labs.Lamp(bool), doClose=False, cmd=cmd)
+        self.sendOneCommand(labs.setLamp(bool), doClose=False, cmd=cmd)
         self.halogenBool = bool
 
-    def getStatus(self, cmd, doFinish=False):
+    def getStatus(self, cmd, doFinish=True):
         ender = cmd.finish if doFinish else cmd.inform
 
-        labs = LabsphereTalk()
-        flux = self.sendOneCommand(labs.Read_Photodiode(), doClose=True, cmd=cmd)
-        flux = flux if flux != '' else np.nan
-        self.arrPhotodiode.append((dt.now(), float(flux)))
+        cmd.inform('labsMode=%s' % self.mode)
+        cmd.inform('labsState=%s' % self.fsm.current)
 
-        arrPhotodiode = [(date, val) for date, val in self.arrPhotodiode if (dt.now() - date).total_seconds() < 60]
-        self.arrPhotodiode = arrPhotodiode
+        if self.fsm.current in ['IDLE', 'BUSY']:
+            labs = LabsphereTalk()
+            flux = self.sendOneCommand(labs.photodiode(), doClose=True, cmd=cmd)
+            flux = flux if flux != '' else np.nan
+            self.arrPhotodiode.append((dt.now(), float(flux)))
 
-        cmd.inform("attenuator=%i" % self.attenVal)
-        cmd.inform("halogen=%s" % ("on" if self.halogenBool else "off"))
-        cmd.inform("fluxmedian=%.3f" % self.fluxmedian)
-        ender("photodiode=%.3f" % float(flux))
+            arrPhotodiode = [(date, val) for date, val in self.arrPhotodiode if (dt.now() - date).total_seconds() < 60]
+            self.arrPhotodiode = arrPhotodiode
 
-    def initialise(self, cmd):
-        labs = LabsphereTalk()
-        for cmdStr, tempo in labs.LabSphere_init():
-            self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
-            time.sleep(tempo)
+            cmd.inform("attenuator=%i" % self.attenVal)
+            cmd.inform("halogen=%s" % ("on" if self.halogenBool else "off"))
+            cmd.inform("fluxmedian=%.3f" % self.fluxmedian)
+            cmd.inform("photodiode=%.3f" % float(flux))
 
-        self.attenVal = 0
-
-    def connectSock(self):
-        """ Connect socket if self.sock is None
-
-        :param cmd : current command,
-        :return: sock in operation
-                 bsh simulator in simulation
-        """
-
-        if self.sock is None:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(2.0)
-            except Exception as e:
-                raise Exception("%s failed to create socket : %s" % (self.name, self.formatException(e)))
-
-            try:
-                s.connect((self.host, self.port))
-
-            except Exception as e:
-                raise Exception("%s failed to connect socket : %s" % (self.name, self.formatException(e)))
-
-            self.sock = s
-
-        return self.sock
+        if doFinish:
+            cmd.finish()

@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 
-import sys
 
 import opscore.protocols.keys as keys
 import opscore.protocols.types as types
-from dcbActor.wrap import threaded
+from enuActor.utils.wrap import threaded
 
 
 class AtenCmd(object):
@@ -20,6 +19,7 @@ class AtenCmd(object):
         self.name = "aten"
         self.vocab = [
             (self.name, 'status', self.status),
+            (self.name, 'init', self.initialise),
             ('power', '@(on|off) @(<channel>|<channels>)', self.switch),
         ]
 
@@ -36,19 +36,11 @@ class AtenCmd(object):
         except KeyError:
             raise RuntimeError('%s controller is not connected.' % (self.name))
 
-
     @threaded
     def status(self, cmd):
         """Report status and version; obtain and send current data"""
 
-        config = self.actor.config
-        options = config.options("address")
-
-        channels = [channel for channel in options]
-
-        self.controller.getStatus(cmd, channels, doClose=True)
-
-        cmd.finish()
+        self.controller.getStatus(cmd)
 
     @threaded
     def switch(self, cmd):
@@ -62,20 +54,19 @@ class AtenCmd(object):
         bool = True if "on" in cmdKeys else False
 
         for channel in channels:
-            try:
-                ret = self.controller.switch(cmd, channel, bool)
+            ret = self.controller.switch(cmd, channel, bool)
 
-            except Exception as e:
-                cmd.fail(
-                    "text='switch %s has failed %s'" % (channel, self.controller.formatException(e, sys.exc_info()[2])))
-                self.controller.closeSock()
-                return
+        self.controller.getStatus(cmd, channels=channels)
 
-        self.controller.getStatus(cmd, channels, doClose=True)
-
-        cmd.finish()
         if channels == ["pow_attenuator", "pow_sphere", "pow_halogen"]:
             try:
                 self.actor.controllers['labsphere'].resetValue()
             except:
                 pass
+
+    @threaded
+    def initialise(self, cmd):
+        """Initialise BSH, call fsm startInit event """
+
+        self.controller.fsm.startInit(cmd=cmd)
+        self.controller.getStatus(cmd)

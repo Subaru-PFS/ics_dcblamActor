@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 
-import sys
 
-import numpy as np
 import opscore.protocols.keys as keys
 import opscore.protocols.types as types
-from dcbActor.wrap import threaded
+from enuActor.utils.wrap import threaded
 
 
 class LabsphereCmd(object):
@@ -44,48 +42,28 @@ class LabsphereCmd(object):
     def status(self, cmd):
         """Report status and version; obtain and send current data"""
 
-        try:
-            self.controller.getStatus(cmd, doFinish=True)
+        self.controller.getStatus(cmd)
 
-        except Exception as e:
-            cmd.warn(
-                "text='get photodiode value has failed %s'" % (self.controller.formatException(e, sys.exc_info()[2])))
-
-            self.controller.closeSock()
-
-
-
+    @threaded
     def switchAttenuator(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
         value = cmdKeys['attenuator'].values[0]
 
-        try:
-            ret = self.controller.switchAttenuator(cmd, value)
+        self.controller.switchAttenuator(cmd, value)
+        self.controller.getStatus(cmd)
 
-            self.status(cmd)
-        except Exception as e:
-            cmd.fail("text='switch attenuator has failed %s'" % (self.controller.formatException(e, sys.exc_info()[2])))
-            self.controller.closeSock()
-
+    @threaded
     def initialise(self, cmd):
-        try:
-            ret = self.controller.initialise(cmd)
-            self.status(cmd)
-        except Exception as e:
-            cmd.fail(
-                "text='initialise labsphere has failed %s'" % (self.controller.formatException(e, sys.exc_info()[2])))
-            self.controller.closeSock()
 
+        self.controller.fsm.startInit(cmd=cmd)
+        self.controller.getStatus(cmd)
+
+    @threaded
     def switchHalogen(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
         bool = True if 'on' in cmdKeys else False
 
-        try:
-            ret = self.controller.switchHalogen(cmd, bool)
-
-            self.status(cmd)
-        except Exception as e:
-            cmd.fail("text='switch halogen has failed %s'" % (self.controller.formatException(e, sys.exc_info()[2])))
-            self.controller.closeSock()
+        self.controller.switchHalogen(cmd, bool)
+        self.controller.getStatus(cmd)

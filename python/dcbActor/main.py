@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 
-import ConfigParser
+from future import standard_library
+standard_library.install_aliases()
+import configparser
 import argparse
 import logging
 import time
@@ -54,9 +56,9 @@ class OurActor(actorcore.ICC.ICC):
         logging.info("reading config file %s", self.configFile)
 
         try:
-            newConfig = ConfigParser.ConfigParser()
+            newConfig = configparser.ConfigParser()
             newConfig.read(self.configFile)
-        except Exception, e:
+        except Exception as e:
             if cmd:
                 cmd.fail('text=%s' % (qstr("failed to read the configuration file, old config untouched: %s" % (e))))
             raise
@@ -74,8 +76,10 @@ class OurActor(actorcore.ICC.ICC):
             logging.info("All Controllers started")
 
     def attachController(self, controller, instanceName=None, cmd=None):
+
         cmd = cmd if cmd is not None else self.bcast
         actorcore.ICC.ICC.attachController(self, controller, instanceName)
+        self.controllers[controller].fsm.startLoading(cmd=cmd)
 
     def statusLoop(self, controller):
         if self.monitors[controller] > 0:
@@ -116,7 +120,7 @@ class OurActor(actorcore.ICC.ICC):
         if nextArcState != self.arcState:
             if arcLamp in ['ne', 'hgar', 'xenon', 'krypton']:
                 ret = self.controllers["aten"].switch(cmd, arcLamp, switchOn)
-                self.controllers["aten"].getStatus(cmd, [arcLamp], doClose=True)
+                self.controllers["aten"].getStatus(cmd, [arcLamp], doFinish=False)
             else:
                 self.controllers["labsphere"].switchHalogen(cmd, switchOn)
             empty = True
@@ -134,19 +138,25 @@ class OurActor(actorcore.ICC.ICC):
         self.monitor(controller="labsphere", period=0, cmd=cmd)
 
         while not self.warmingUp:
-            self.controllers["labsphere"].getStatus(cmd)
+            self.controllers["labsphere"].getStatus(cmd, doFinish=False)
             time.sleep(5)
             cmd.inform("text='Warming up lamp'")
 
         if not force:
             while not (np.mean(self.flux) > 0.001 and np.std(self.flux) < 0.05):
-                self.controllers["labsphere"].getStatus(cmd)
+                self.controllers["labsphere"].getStatus(cmd, doFinish=False)
                 time.sleep(5)
-                cmd.inform("text='Waiting photodiode flux to stabilise meanFlux=%.2f stdFlux=%.2f'" % (np.mean(self.flux), np.std(self.flux)))
+                cmd.inform("text='Waiting photodiode flux to stabilise meanFlux=%.2f stdFlux=%.2f'" % (np.mean(self.flux),
+                                                                                                       np.std(self.flux)))
                 if (dt.now() - t0).total_seconds() > 240:
                     raise Exception('Timeout photodiode flux is null or unstable')
 
         self.monitor(controller="labsphere", period=5, cmd=cmd)
+
+    def strTraceback(self, e):
+
+        oneLiner = self.cmdTraceback(e)
+        return qstr("command failed: %s" % oneLiner)
 
 def main():
     parser = argparse.ArgumentParser()

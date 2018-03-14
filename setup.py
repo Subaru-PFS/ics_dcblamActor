@@ -5,6 +5,7 @@ import sdss3tools
 import os
 
 sdss3tools.setup(
-    description = "Toy SDSS-3 actor.",
+    name='ics_dcbActor',
+    description="Toy SDSS-3 actor.",
     )
 

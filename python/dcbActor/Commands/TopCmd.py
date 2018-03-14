@@ -72,7 +72,7 @@ class TopCmd(object):
             cmd.fail('text="no controllers found"')
 
     def controllerKey(self):
-        controllerNames = self.actor.controllers.keys()
+        controllerNames = list(self.actor.controllers.keys())
         key = 'controllers=%s' % (','.join([c for c in controllerNames]))
 
         return key
@@ -111,7 +111,7 @@ class TopCmd(object):
 
     def initControllers(self, cmd):
         for c in self.actor.controllers:
-            print "c=", c
+            print("c=", c)
             self.actor.callCommand("%s init" % c)
         cmd.finish()
 

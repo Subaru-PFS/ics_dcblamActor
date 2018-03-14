@@ -1,11 +1,11 @@
 __author__ = 'alefur'
 import logging
 import socket
-import sys
 import time
 
-import dcbActor.Controllers.bufferedSocket as bufferedSocket
-from dcbActor.Controllers.device import Device
+import enuActor.Controllers.bufferedSocket as bufferedSocket
+from enuActor.Controllers.device import Device
+from dcbActor.Controllers.simulator.atensim import Atensim
 
 
 class aten(Device):
@@ -15,14 +15,39 @@ class aten(Device):
         Device.__init__(self, actor, name)
 
         self.sock = None
+        self.simulator = None
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r\n>')
         self.EOL = '\r\n'
 
-        self.host = self.actor.config.get('aten', 'host')
-        self.port = int(self.actor.config.get('aten', 'port'))
         self.state = {}
 
         self.actor.callCommand("%s status" % name)
+
+    def loadCfg(self, cmd, mode=None):
+        """| Load Configuration file. called by device.loadDevice()
+
+        :param cmd: on going command
+        :param mode: operation|simulation, loaded from config file if None
+        :type mode: str
+        :raise: Exception Config file badly formatted
+        """
+
+        self.actor.reloadConfiguration(cmd=cmd)
+
+        self.host = self.actor.config.get('aten', 'host')
+        self.port = int(self.actor.config.get('aten', 'port'))
+        self.mode = self.actor.config.get('aten', 'mode')
+
+    def startCommunication(self, cmd):
+        """| Start socket with the interlock board or simulate it.
+        | Called by device.loadDevice()
+
+        :param cmd: on going command,
+        :raise: Exception if the communication has failed with the controller
+        """
+        self.simulator = Atensim() if self.mode == "simulation" else None  # Create new simulator
+
+        s = self.connectSock()
 
     def switch(self, cmd, channel, bool):
         bool = 'on' if bool else 'off'
@@ -38,21 +63,34 @@ class aten(Device):
             time.sleep(1)
             return self.checkStatus(cmd, channel)
         else:
-            return "on" if ' on' in ret.split('\r\n')[1] else "off"
+            return "on" if ' on' in ret else "off"
 
-    def getStatus(self, cmd, channels, doClose=False):
-        for channel in channels:
-            try:
-                stat = self.checkStatus(cmd, channel)
-                self.state[channel] = True if stat == "on" else False
-                cmd.inform("%s=%s" % (channel, stat))
-            except Exception as e:
-                cmd.warn("text='checkStatus %s has failed %s'" % (channel, self.formatException(e, sys.exc_info()[2])))
+    def getStatus(self, cmd, channels=False, doFinish=True):
 
-        v, a, w = self.checkVaw(cmd)
-        cmd.inform("aten_vaw=%s,%s,%s" % (v, a, w))
-        if doClose:
+        if not channels:
+            config = self.actor.config
+            options = config.options("address")
+            channels = [channel for channel in options]
+
+        cmd.inform('atenMode=%s'%self.mode)
+        cmd.inform('atenState=%s' % self.fsm.current)
+
+        if self.fsm.current in ['IDLE', 'BUSY']:
+
+            for channel in channels:
+                try:
+                    stat = self.checkStatus(cmd, channel)
+                    self.state[channel] = True if stat == "on" else False
+                    cmd.inform("%s=%s" % (channel, stat))
+                except Exception as e:
+                    cmd.warn('text=%s' % self.actor.strTraceback(e))
+
+            v, a, w = self.checkVaw(cmd)
+            cmd.inform("aten_vaw=%s,%s,%s" % (v, a, w))
+
+        if doFinish:
             self.closeSock()
+            cmd.finish()
 
     def checkVaw(self, cmd):
 
@@ -60,7 +98,7 @@ class aten(Device):
         a = self.sendOneCommand('read meter dev curr simple', doClose=False, cmd=cmd)
         w = self.sendOneCommand('read meter dev pow simple', doClose=False, cmd=cmd)
 
-        return v.split('\r\n')[1].strip(), a.split('\r\n')[1].strip(), w.split('\r\n')[1].strip()
+        return v, a, w
 
     def connectSock(self, i=0):
         """ Connect socket if self.sock is None
@@ -71,37 +109,39 @@ class aten(Device):
         """
 
         if self.sock is None:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(2.0)
-            except Exception as e:
-                raise Exception("%s failed to create socket : %s" % (self.name, self.formatException(e)))
 
-            try:
-                s.connect((self.host, self.port))
-                time.sleep(0.1)
-                if s.recv(1024)[-7:] != "Login: ":
-                    if i > 2:
-                        raise Exception("weird")
-                    else:
-                        return self.connectSock(i + 1)
-                s.send("teladmin%s" % self.EOL)
-                time.sleep(0.1)
-                if s.recv(1024)[-10:] != "Password: ":
-                    if i > 2:
-                        raise Exception("bad login")
-                    else:
-                        return self.connectSock(i + 1)
-                s.send("pfsait%s" % self.EOL)
-                time.sleep(0.1)
-                if "Logged in successfully" not in s.recv(1024):
-                    if i > 2:
-                        raise Exception("bad password")
-                    else:
-                        return self.connectSock(i + 1)
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) if self.mode == 'operation' else self.simulator
+            s.settimeout(2.0)
+            s.connect((self.host, self.port))
 
-            except Exception as e:
-                raise Exception("%s failed to connect socket : %s" % (self.name, self.formatException(e)))
+            time.sleep(0.1)
+            msg = s.recv(1024)
+            msg = msg.decode()
+            if msg[-7:] != "Login: ":
+                if i > 2:
+                    raise Exception("weird")
+                else:
+                    return self.connectSock(i + 1)
+
+            s.sendall(("teladmin%s" % self.EOL).encode())
+
+            time.sleep(0.1)
+            msg = s.recv(1024).decode()
+            if msg[-10:] != "Password: ":
+                if i > 2:
+                    raise Exception("bad login")
+                else:
+                    return self.connectSock(i + 1)
+
+            s.sendall(("pfsait%s" % self.EOL).encode())
+
+            time.sleep(0.1)
+            msg = s.recv(1024).decode()
+            if "Logged in successfully" not in msg:
+                if i > 2:
+                    raise Exception("bad password")
+                else:
+                    return self.connectSock(i + 1)
 
             self.sock = s
 

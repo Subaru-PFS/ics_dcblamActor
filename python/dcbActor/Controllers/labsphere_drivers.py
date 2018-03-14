@@ -1,46 +1,45 @@
-class LabsphereTalk:
-    def Attenuator(self, v):
-        if (v < 0) or (v > 255):
-            Exception("Error : Value must be within [0:255]")
-        s = format(v, "08b")
-        s3 = "P1"
-        i = 1
+class LabsphereTalk(object):
+    conv = {'0': 'K', '1': 'J'}
 
-        for l in reversed(s):
-            if l == '0':
-                s3 += 'K'
-            else:
-                s3 += 'J'
-            s3 += str(i)
-            i += 1
+    def attenuator(self, value):
+        if not (0 <= value <= 255):
+            raise ValueError('Value must be within [0:255]')
 
-        coll = [(s3, 0.8), ("P2K3X", 0.5), ("P2K1K2", 0.8), ("P2J3X", 0.0)]
+        bits = format(value, '08b')
+
+        cmdStr = ''.join(['%s%i' % (LabsphereTalk.conv[bit], len(bits) - i) for i, bit in enumerate(bits)])
+
+        coll = [('P1%sX' % cmdStr, 1.0), ('K2K1X', 1.0), ('P2K3X', 1.0), ('P2J3X', 0.0)]
 
         return coll
 
-    def Lamp(self, v):
+    def setLamp(self, boolean):
+        cmdStr = 'P3J1X' if boolean else 'P3K1X'
+        return cmdStr
 
-        s = "P3J1X" if v else "P3K1X"
+    def lampOn(self):
+        return self.setLamp(True)
 
-        return s
+    def LampOff(self):
+        return self.setLamp(False)
 
-    def Lamp_on(self):
-        return self._Lamp(True)
+    def photodiode(self):
+        return 'O0X'
 
-    def Lamp_off(self):
-        return self._Lamp(False)
+    def init(self):
+        coll = [('L0X', 1.0),  # Remote control mode
+                ('Z1X', 1.0),  # Turn off zero mdde
+                ('A0X', 1.0),  # Auto ranging mode
+                ('N1X', 1.0),  # Normalize mode
+                ('H1X', 1.0),  # Display 4 digits
+                ('F1X', 1.0),  # Turn off Digital filter
+                ('C1X', 1.0),  # Default current mode
+                ('P3K1X', 0)]  # switch lamp off
 
-    def Read_Photodiode(self):
-        return "O0X"
-
-    def LabSphere_init(self):
-        coll = [("Z1X", 0.2), ("A0X", 0.2), ("N1X", 0.2), ("H1X", 0.2), ("L1X", 0.2), ("F1X", 0.2),
-                ("C2X", 0.2), ("P3X", 0.2), ("K1X", 0.2), ("P1J1J2J3J4J5J6J7J8", 0.5), ("P2K3X", 0.5),
-                ("P2K1K2", 0.8), ("P2J3X", 0.8), ("P2K3X", 0.0)]
         return coll
 
-    def Open(self):
-        return self.Attenuator(255)
+    def fullOpen(self):
+        return self.attenuator(0)
 
-    def Close(self):
-        return self.Attenuator(0)
+    def fullClose(self):
+        return self.attenuator(255)
