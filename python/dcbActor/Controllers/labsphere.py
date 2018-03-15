@@ -93,6 +93,7 @@ class labsphere(Device):
         labs = LabsphereTalk()
         self.sendOneCommand(labs.setLamp(bool), doClose=False, cmd=cmd)
         self.halogenBool = bool
+        cmd.inform("halogen=%s" % ("on" if self.halogenBool else "off"))
 
     def getStatus(self, cmd, doFinish=True):
         ender = cmd.finish if doFinish else cmd.inform
