@@ -26,17 +26,17 @@ class Atensim(socket.socket):
         if type(port) is not int:
             raise TypeError
 
-        self.buf.append('Login: ')
+        self.buf.append('Login: \r\n>')
 
     def fakeSend(self, cmdStr):
         time.sleep(0.1)
         cmdStr = cmdStr.decode()
 
         if cmdStr == 'teladmin\r\n':
-            self.buf.append('Password: ')
+            self.buf.append('Password: \r\n>')
 
         elif cmdStr == 'pfsait\r\n':
-            self.buf.append('Logged in successfully')
+            self.buf.append('Logged in successfully \r\n>')
 
         elif 'read status' in cmdStr:
             __, __, nb, __ = cmdStr.split(' ')

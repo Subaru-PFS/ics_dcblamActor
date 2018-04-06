@@ -56,7 +56,7 @@ class LabsphereCmd(object):
     @threaded
     def initialise(self, cmd):
 
-        self.controller.fsm.startInit(cmd=cmd)
+        self.controller.substates.init(cmd=cmd)
         self.controller.getStatus(cmd)
 
     @threaded

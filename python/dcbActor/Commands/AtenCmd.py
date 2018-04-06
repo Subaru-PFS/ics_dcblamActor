@@ -19,8 +19,7 @@ class AtenCmd(object):
         self.name = "aten"
         self.vocab = [
             (self.name, 'status', self.status),
-            (self.name, 'init', self.initialise),
-            ('power', '@(on|off) @(<channel>|<channels>)', self.switch),
+            ('power', '@(on|off) @(<channel>|<channels>|labsphere)', self.switch),
         ]
 
         # Define typed command arguments for the above commands.
@@ -46,7 +45,14 @@ class AtenCmd(object):
     def switch(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
-        if "channels" in cmdKeys:
+        if 'labsphere' in cmdKeys:
+            channels = ["pow_attenuator", "pow_sphere", "pow_halogen"]
+            try:
+                self.actor.controllers['labsphere'].resetValue()
+            except:
+                pass
+
+        elif "channels" in cmdKeys:
             channels = cmdKeys["channels"].values
         else:
             channels = [cmdKeys["channel"].values[0]]
@@ -56,17 +62,4 @@ class AtenCmd(object):
         for channel in channels:
             ret = self.controller.switch(cmd, channel, bool)
 
-        self.controller.getStatus(cmd, channels=channels)
-
-        if channels == ["pow_attenuator", "pow_sphere", "pow_halogen"]:
-            try:
-                self.actor.controllers['labsphere'].resetValue()
-            except:
-                pass
-
-    @threaded
-    def initialise(self, cmd):
-        """Initialise BSH, call fsm startInit event """
-
-        self.controller.fsm.startInit(cmd=cmd)
         self.controller.getStatus(cmd)

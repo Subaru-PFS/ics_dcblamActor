@@ -35,7 +35,7 @@ class Labspheresim(socket.socket):
             photodiode += offset
             self.buf.append('%g\r\n' % photodiode)
         else:
-            self.buf.append('ok\r\n')
+            self.buf.append('\r\n')
 
     def fakeRecv(self, buffer_size):
         ret = self.buf[0]

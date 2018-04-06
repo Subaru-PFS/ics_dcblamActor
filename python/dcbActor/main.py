@@ -2,6 +2,7 @@
 
 
 from future import standard_library
+
 standard_library.install_aliases()
 import configparser
 import argparse
@@ -25,13 +26,14 @@ class OurActor(actorcore.ICC.ICC):
         self.logger.setLevel(logLevel)
 
         self.everConnected = False
+        self.onWarmup = False
 
         self.monitors = dict()
 
         self.statusLoopCB = self.statusLoop
 
-        self.monitor(controller="labsphere", period=5)
-        self.monitor(controller="aten", period=60)
+        #self.monitor(controller="labsphere", period=5)
+        #self.monitor(controller="aten", period=60)
 
     @property
     def arcState(self):
@@ -39,7 +41,7 @@ class OurActor(actorcore.ICC.ICC):
                 "hgar": self.controllers["aten"].state["hgar"],
                 "xenon": self.controllers["aten"].state["xenon"],
                 "krypton": self.controllers["aten"].state["krypton"],
-                "halogen": self.controllers["labsphere"].halogenBool}
+                "halogen": self.controllers["labsphere"].halogenOn}
 
     @property
     def flux(self):
@@ -52,20 +54,6 @@ class OurActor(actorcore.ICC.ICC):
         else:
             return False
 
-    def reloadConfiguration(self, cmd):
-        logging.info("reading config file %s", self.configFile)
-
-        try:
-            newConfig = configparser.ConfigParser()
-            newConfig.read(self.configFile)
-        except Exception as e:
-            if cmd:
-                cmd.fail('text=%s' % (qstr("failed to read the configuration file, old config untouched: %s" % (e))))
-            raise
-
-        self.config = newConfig
-        cmd.inform('sections=%08x,%r' % (id(self.config),
-                                         self.config))
 
     def connectionMade(self):
         if self.everConnected is False:
@@ -75,25 +63,20 @@ class OurActor(actorcore.ICC.ICC):
             self.everConnected = True
             logging.info("All Controllers started")
 
-    def attachController(self, controller, instanceName=None, cmd=None):
-
-        cmd = cmd if cmd is not None else self.bcast
-        actorcore.ICC.ICC.attachController(self, controller, instanceName)
-        self.controllers[controller].fsm.startLoading(cmd=cmd)
-
     def statusLoop(self, controller):
-        if self.monitors[controller] > 0:
-            try:
-                self.callCommand("%s status" % (controller))
-            except:
-                pass
+        try:
+            self.callCommand("%s status" % (controller))
+        except:
+            pass
 
+        if self.monitors[controller] > 0:
             reactor.callLater(self.monitors[controller],
                               self.statusLoopCB,
                               controller)
 
     def monitor(self, controller, period, cmd=None):
         cmd = cmd if cmd is not None else self.bcast
+
         if controller not in self.monitors:
             self.monitors[controller] = 0
 
@@ -101,11 +84,12 @@ class OurActor(actorcore.ICC.ICC):
         self.monitors[controller] = period
 
         if (not running) and period > 0:
-            cmd.warn('text="starting %gs loop for %s"' % (self.monitors[controller],
-                                                          controller))
+
+            cmd.warn('text="starting %gs loop for %s"' % (self.monitors[controller], controller))
             self.statusLoopCB(controller)
         else:
             cmd.warn('text="adjusted %s loop to %gs"' % (controller, self.monitors[controller]))
+
 
     def switchArc(self, cmd, arcLamp, switchOn, attenVal, force):
         empty = False
@@ -120,7 +104,7 @@ class OurActor(actorcore.ICC.ICC):
         if nextArcState != self.arcState:
             if arcLamp in ['ne', 'hgar', 'xenon', 'krypton']:
                 ret = self.controllers["aten"].switch(cmd, arcLamp, switchOn)
-                self.controllers["aten"].getStatus(cmd, [arcLamp], doFinish=False)
+                self.controllers["aten"].checkChannel(cmd=cmd, channel=arcLamp)
             else:
                 self.controllers["labsphere"].switchHalogen(cmd, switchOn)
             empty = True
@@ -134,29 +118,37 @@ class OurActor(actorcore.ICC.ICC):
         cmd.finish("text='%s ok'" % arcLamp)
 
     def waitForFlux(self, cmd, force):
-        t0 = dt.now()
-        self.monitor(controller="labsphere", period=0, cmd=cmd)
+        pass
+        # t0 = dt.now()
+        # self.monitor(controller="labsphere", period=0, cmd=cmd)
+        # self.onWarmup = True
+        #
+        # while not self.warmingUp:
+        #     self.controllers["labsphere"].getStatus(cmd, doFinish=False)
+        #     time.sleep(5)
+        #
+        # if not force:
+        #     while not (np.mean(self.flux) > 0.001 and np.std(self.flux) < 0.05):
+        #         self.controllers["labsphere"].getStatus(cmd, doFinish=False)
+        #         time.sleep(5)
+        #         # cmd.inform("text='Waiting photodiode flux to stabilise meanFlux=%.2f stdFlux=%.2f'" % (np.mean(self.flux),
+        #         #                                                                                       np.std(self.flux)))
+        #         if (dt.now() - t0).total_seconds() > 240:
+        #             raise Exception('Timeout photodiode flux is null or unstable')
+        #
+        # self.onWarmup = False
+        # self.monitor(controller="labsphere", period=5, cmd=cmd)
 
-        while not self.warmingUp:
-            self.controllers["labsphere"].getStatus(cmd, doFinish=False)
-            time.sleep(5)
-            cmd.inform("text='Warming up lamp'")
+    def getState(self, cmd):
+        states = ['IDLE', 'LOADING', 'LOADED', 'INITIALISING', 'WARMING', 'BUSY', 'FAILED']
+        val2state = dict([(val, state) for val, state in enumerate(states)])
+        state2val = dict([(state, val) for val, state in enumerate(states)])
 
-        if not force:
-            while not (np.mean(self.flux) > 0.001 and np.std(self.flux) < 0.05):
-                self.controllers["labsphere"].getStatus(cmd, doFinish=False)
-                time.sleep(5)
-                cmd.inform("text='Waiting photodiode flux to stabilise meanFlux=%.2f stdFlux=%.2f'" % (np.mean(self.flux),
-                                                                                                       np.std(self.flux)))
-                if (dt.now() - t0).total_seconds() > 240:
-                    raise Exception('Timeout photodiode flux is null or unstable')
+        maxVal = np.max([state2val[controller.fsm.current] for controller in self.controllers.values()])
+        maxVal = 4 if self.onWarmup else maxVal
 
-        self.monitor(controller="labsphere", period=5, cmd=cmd)
+        cmd.inform('dcbState=%s' % val2state[maxVal])
 
-    def strTraceback(self, e):
-
-        oneLiner = self.cmdTraceback(e)
-        return qstr("command failed: %s" % oneLiner)
 
 def main():
     parser = argparse.ArgumentParser()

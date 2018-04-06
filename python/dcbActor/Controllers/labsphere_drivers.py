@@ -1,45 +1,44 @@
-class LabsphereTalk(object):
-    conv = {'0': 'K', '1': 'J'}
+logic = {'0': 'K', '1': 'J'}
 
-    def attenuator(self, value):
-        if not (0 <= value <= 255):
-            raise ValueError('Value must be within [0:255]')
 
-        bits = format(value, '08b')
+def attenuator(value):
+    if not (0 <= value <= 255):
+        raise ValueError('Value must be within [0:255]')
 
-        cmdStr = ''.join(['%s%i' % (LabsphereTalk.conv[bit], len(bits) - i) for i, bit in enumerate(bits)])
+    bits = format(value, '08b')
 
-        coll = [('P1%sX' % cmdStr, 1.0), ('K2K1X', 1.0), ('P2K3X', 1.0), ('P2J3X', 0.0)]
+    cmdStr = ''.join(['%s%i' % (logic[bit], len(bits) - i) for i, bit in enumerate(bits)])
 
-        return coll
+    coll = [('P1%sX' % cmdStr, 1.0), ('K2K1X', 1.0), ('P2K3X', 1.0), ('P2J3X', 0.0)]
 
-    def setLamp(self, boolean):
-        cmdStr = 'P3J1X' if boolean else 'P3K1X'
-        return cmdStr
+    return coll
 
-    def lampOn(self):
-        return self.setLamp(True)
 
-    def LampOff(self):
-        return self.setLamp(False)
+def setLamp(boolean):
+    cmdStr = 'P3J1X' if boolean else 'P3K1X'
+    return cmdStr
 
-    def photodiode(self):
-        return 'O0X'
 
-    def init(self):
-        coll = [('L0X', 1.0),  # Remote control mode
-                ('Z1X', 1.0),  # Turn off zero mdde
-                ('A0X', 1.0),  # Auto ranging mode
-                ('N1X', 1.0),  # Normalize mode
-                ('H1X', 1.0),  # Display 4 digits
-                ('F1X', 1.0),  # Turn off Digital filter
-                ('C1X', 1.0),  # Default current mode
-                ('P3K1X', 0)]  # switch lamp off
+def photodiode():
+    return 'O0X'
 
-        return coll
 
-    def fullOpen(self):
-        return self.attenuator(0)
+def init():
+    coll = [('L0X', 1.0),  # Remote control mode
+            ('Z1X', 1.0),  # Turn off zero mdde
+            ('A0X', 1.0),  # Auto ranging mode
+            ('N1X', 1.0),  # Normalize mode
+            ('H1X', 1.0),  # Display 4 digits
+            ('F1X', 1.0),  # Turn off Digital filter
+            ('C1X', 1.0),  # Default current mode
+            ('P3K1X', 0)]  # switch lamp off
 
-    def fullClose(self):
-        return self.attenuator(255)
+    return coll
+
+
+def fullOpen():
+    return attenuator(0)
+
+
+def fullClose():
+    return attenuator(255)
