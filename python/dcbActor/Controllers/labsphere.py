@@ -1,12 +1,12 @@
-import time
 import logging
-import numpy as np
+import time
+
 import dcbActor.Controllers.labsphere_drivers as labs
 import enuActor.Controllers.bufferedSocket as bufferedSocket
-
-from dcbActor.Controllers.simulator.labsim import Labspheresim
+import numpy as np
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
+from dcbActor.Controllers.simulator.labsim import Labspheresim
 
 
 class Flux(list):
@@ -67,7 +67,6 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
 
         self.addStateCB('MOVING', self.moveAttenuator)
         self.addStateCB('WARMING', self.switchHalogen)
-
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)

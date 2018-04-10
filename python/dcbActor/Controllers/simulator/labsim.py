@@ -1,6 +1,6 @@
-import time
-import socket
 import random
+import socket
+import time
 
 
 class Labspheresim(socket.socket):
@@ -32,7 +32,7 @@ class Labspheresim(socket.socket):
             except KeyError:
                 offset = 0
 
-            self.buf.append('%g\r\n' % (offset+noise))
+            self.buf.append('%g\r\n' % (offset + noise))
         else:
             self.buf.append('\r\n')
 

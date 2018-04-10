@@ -3,10 +3,9 @@ import logging
 import time
 
 import enuActor.Controllers.bufferedSocket as bufferedSocket
-
-from dcbActor.Controllers.simulator.atensim import Atensim
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
+from dcbActor.Controllers.simulator.atensim import Atensim
 
 
 class aten(FSMDev, QThread, bufferedSocket.EthComm):

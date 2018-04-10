@@ -1,10 +1,11 @@
 import logging
-from actorcore.FSM import FSMDev
-from actorcore.QThread import QThread
 import time
 
+from actorcore.FSM import FSMDev
+from actorcore.QThread import QThread
 
-class arc(FSMDev,QThread):
+
+class arc(FSMDev, QThread):
     def __init__(self, actor, name, loglevel=logging.DEBUG):
         """This sets up the connections to/from the hub, the logger, and the twisted reactor.
 
@@ -82,7 +83,6 @@ class arc(FSMDev,QThread):
         except:
             self.substates.fail(cmd=e.cmd)
             raise
-
 
     def handleTimeout(self):
         if self.exitASAP:
