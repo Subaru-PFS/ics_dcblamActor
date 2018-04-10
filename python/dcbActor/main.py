@@ -1,18 +1,10 @@
 #!/usr/bin/env python
 
-
-from future import standard_library
-
-standard_library.install_aliases()
-import configparser
 import argparse
 import logging
-import time
-from datetime import datetime as dt
 
 import actorcore.ICC
 import numpy as np
-from opscore.utility.qstr import qstr
 from twisted.internet import reactor
 
 
@@ -27,33 +19,37 @@ class OurActor(actorcore.ICC.ICC):
 
         self.everConnected = False
         self.onWarmup = False
+        self.onsubstate = 'IDLE'
 
         self.monitors = dict()
 
         self.statusLoopCB = self.statusLoop
 
-        #self.monitor(controller="labsphere", period=5)
-        #self.monitor(controller="aten", period=60)
-
     @property
-    def arcState(self):
-        return {"ne": self.controllers["aten"].state["ne"],
-                "hgar": self.controllers["aten"].state["hgar"],
-                "xenon": self.controllers["aten"].state["xenon"],
-                "krypton": self.controllers["aten"].state["krypton"],
-                "halogen": self.controllers["labsphere"].halogenOn}
-
-    @property
-    def flux(self):
-        return np.array([val for date, val in self.controllers["labsphere"].arrPhotodiode])
-
-    @property
-    def warmingUp(self):
-        if len(self.flux) > 10:
-            return True
+    def state(self):
+        states = ['OFF', 'LOADED', 'ONLINE']
+        state2logic = dict([(state, val) for val, state in enumerate(states)])
+        logic2state = dict([(val, state) for val, state in enumerate(states)])
+        if self.controllers.values():
+            minLogic = np.min([state2logic[ctrl.states.current] for ctrl in self.controllers.values()])
+            state = logic2state[minLogic]
         else:
-            return False
+            state = 'OFF'
 
+        return state
+
+    @property
+    def substate(self):
+
+        if self.controllers.values():
+            if False in [controller.substates.current == 'IDLE' for controller in self.controllers.values()]:
+                substate = self.onsubstate
+            else:
+                substate = 'IDLE'
+        else:
+            substate = 'IDLE'
+
+        return substate
 
     def connectionMade(self):
         if self.everConnected is False:
@@ -90,64 +86,10 @@ class OurActor(actorcore.ICC.ICC):
         else:
             cmd.warn('text="adjusted %s loop to %gs"' % (controller, self.monitors[controller]))
 
+    def updateStates(self, cmd, onsubstate=False):
+        self.onsubstate = onsubstate if onsubstate and onsubstate != 'IDLE' else self.onsubstate
 
-    def switchArc(self, cmd, arcLamp, switchOn, attenVal, force):
-        empty = False
-
-        if attenVal is not None and self.controllers["labsphere"].attenVal != attenVal:
-            self.controllers["labsphere"].switchAttenuator(cmd, attenVal)
-            cmd.inform("text='attenuator adjusted'")
-
-        nextArcState = self.arcState
-        nextArcState[arcLamp] = switchOn
-
-        if nextArcState != self.arcState:
-            if arcLamp in ['ne', 'hgar', 'xenon', 'krypton']:
-                ret = self.controllers["aten"].switch(cmd, arcLamp, switchOn)
-                self.controllers["aten"].checkChannel(cmd=cmd, channel=arcLamp)
-            else:
-                self.controllers["labsphere"].switchHalogen(cmd, switchOn)
-            empty = True
-
-        if empty:
-            self.controllers["labsphere"].arrPhotodiode = []
-
-        if switchOn:
-            self.waitForFlux(cmd, force)
-
-        cmd.finish("text='%s ok'" % arcLamp)
-
-    def waitForFlux(self, cmd, force):
-        pass
-        # t0 = dt.now()
-        # self.monitor(controller="labsphere", period=0, cmd=cmd)
-        # self.onWarmup = True
-        #
-        # while not self.warmingUp:
-        #     self.controllers["labsphere"].getStatus(cmd, doFinish=False)
-        #     time.sleep(5)
-        #
-        # if not force:
-        #     while not (np.mean(self.flux) > 0.001 and np.std(self.flux) < 0.05):
-        #         self.controllers["labsphere"].getStatus(cmd, doFinish=False)
-        #         time.sleep(5)
-        #         # cmd.inform("text='Waiting photodiode flux to stabilise meanFlux=%.2f stdFlux=%.2f'" % (np.mean(self.flux),
-        #         #                                                                                       np.std(self.flux)))
-        #         if (dt.now() - t0).total_seconds() > 240:
-        #             raise Exception('Timeout photodiode flux is null or unstable')
-        #
-        # self.onWarmup = False
-        # self.monitor(controller="labsphere", period=5, cmd=cmd)
-
-    def getState(self, cmd):
-        states = ['IDLE', 'LOADING', 'LOADED', 'INITIALISING', 'WARMING', 'BUSY', 'FAILED']
-        val2state = dict([(val, state) for val, state in enumerate(states)])
-        state2val = dict([(state, val) for val, state in enumerate(states)])
-
-        maxVal = np.max([state2val[controller.fsm.current] for controller in self.controllers.values()])
-        maxVal = 4 if self.onWarmup else maxVal
-
-        cmd.inform('dcbState=%s' % val2state[maxVal])
+        cmd.inform('dcbFSM=%s,%s' % (self.state, self.substate))
 
 
 def main():
