@@ -72,16 +72,20 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-
+        cmd.inform('atenMode=%s' % self.mode)
         self.sim = Atensim()
         s = self.connectSock()
+
+    def init(self, cmd):
+        self.actor.monitor(controller="aten", period=60)
 
     def switch(self, cmd, channel, bool):
         bool = 'on' if bool else 'off'
         address = self.actor.config.get('address', channel)
 
-        return self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=cmd)
-
+        ret = self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=cmd)
+        self.checkChannel(cmd=cmd,
+                          channel=channel)
 
     def checkChannel(self, cmd, channel):
 
@@ -94,15 +98,12 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
             return self.checkChannel(cmd, channel)
         else:
             state = 'on' if ' on' in ret else 'off'
-            self.state[channel] = state
+            self.state[channel] = True if state == 'on' else False
             cmd.inform('%s=%s' % (channel, state))
 
     def getStatus(self, cmd):
 
         channels = [channel for channel in self.actor.config.options('address')]
-
-        cmd.inform('atenMode=%s' % self.mode)
-        # self.actor.getState(cmd)
 
         if self.states.current == 'ONLINE':
 
@@ -110,11 +111,10 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
                 self.checkChannel(cmd=cmd, channel=channel)
 
             v, a, w = self.checkVaw(cmd)
-            cmd.inform('aten_vaw=%s,%s,%s' % (v, a, w))
+            cmd.inform('atenVAW=%s,%s,%s' % (v, a, w))
 
         self.closeSock()
         cmd.finish()
-
 
     def checkVaw(self, cmd):
 
@@ -168,7 +168,6 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
 
         if 'Logged in successfully' not in ret:
             raise ValueError('Bad password')
-
 
     def handleTimeout(self):
         if self.exitASAP:
