@@ -19,7 +19,7 @@ class LabsphereCmd(object):
         self.name = "labsphere"
         self.vocab = [
             (self.name, 'status', self.status),
-            (self.name, '<attenuator>', self.switchAttenuator),
+            (self.name, '<attenuator>', self.moveAttenuator),
             (self.name, '@(switch) @(on|off)', self.switchHalogen),
             (self.name, 'init', self.initialise),
 
@@ -45,12 +45,11 @@ class LabsphereCmd(object):
         self.controller.getStatus(cmd)
 
     @threaded
-    def switchAttenuator(self, cmd):
+    def moveAttenuator(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
         value = cmdKeys['attenuator'].values[0]
-
-        self.controller.switchAttenuator(cmd, value)
+        self.controller.substates.move(cmd=cmd, value=value)
         self.controller.getStatus(cmd)
 
     @threaded
@@ -65,5 +64,5 @@ class LabsphereCmd(object):
 
         bool = True if 'on' in cmdKeys else False
 
-        self.controller.switchHalogen(cmd, bool)
+        self.controller.substates.halogen(cmd=cmd, bool=bool)
         self.controller.getStatus(cmd)

@@ -1,6 +1,6 @@
-import time
-import socket
 import random
+import socket
+import time
 
 
 class Labspheresim(socket.socket):
@@ -26,14 +26,13 @@ class Labspheresim(socket.socket):
         cmdStr = cmdStr.decode()
 
         if cmdStr == 'O0X':
-            photodiode = (random.randint(-9, 9)) / 100000
+            noise = random.gauss(mu=0, sigma=0.02)
             try:
-                offset = 3.2 if True in self.actor.arcState.values() else 0
+                offset = 3.2 if True in self.actor.controllers['arc'].state.values() else 0
             except KeyError:
                 offset = 0
 
-            photodiode += offset
-            self.buf.append('%g\r\n' % photodiode)
+            self.buf.append('%g\r\n' % (offset + noise))
         else:
             self.buf.append('\r\n')
 

@@ -1,12 +1,50 @@
-import time
 import logging
-import numpy as np
+import time
+
 import dcbActor.Controllers.labsphere_drivers as labs
 import enuActor.Controllers.bufferedSocket as bufferedSocket
-
-from dcbActor.Controllers.simulator.labsim import Labspheresim
+import numpy as np
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
+from dcbActor.Controllers.simulator.labsim import Labspheresim
+
+
+class Flux(list):
+    def __init__(self):
+        list.__init__(self)
+
+    @property
+    def values(self):
+        return np.array([val for date, val in self])
+
+    @property
+    def median(self):
+        return np.median(self.values)
+
+    @property
+    def mean(self):
+        return np.mean(self.values)
+
+    @property
+    def std(self):
+        return np.std(self.values)
+
+    @property
+    def isWarmedUp(self):
+        ret = True if len(self) > 8 else False
+        return ret
+
+    def append(self, object):
+        list.append(self, object)
+        self.clearOld()
+
+    def clearOld(self, outdated=60):
+        i = 0
+        while i < len(self):
+            if (time.time() - self[i][0]) > outdated:
+                self.remove((self[i]))
+            else:
+                i += 1
 
 
 class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
@@ -16,9 +54,19 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         :param actor: spsaitActor
         :param name: controller name
         """
+        substates = ['IDLE', 'MOVING', 'WARMING', 'FAILED']
+        events = [{'name': 'move', 'src': 'IDLE', 'dst': 'MOVING'},
+                  {'name': 'halogen', 'src': 'IDLE', 'dst': 'WARMING'},
+                  {'name': 'idle', 'src': ['MOVING', 'WARMING'], 'dst': 'IDLE'},
+                  {'name': 'fail', 'src': ['MOVING', 'WARMING'], 'dst': 'FAILED'},
+                  ]
+
         bufferedSocket.EthComm.__init__(self)
         QThread.__init__(self, actor, name)
-        FSMDev.__init__(self, actor, name)
+        FSMDev.__init__(self, actor, name, events=events, substates=substates)
+
+        self.addStateCB('MOVING', self.moveAttenuator)
+        self.addStateCB('WARMING', self.switchHalogen)
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
@@ -30,6 +78,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.mode = ''
         self.sim = None
 
+        self.flux = Flux()
         self.resetValue()
 
     @property
@@ -41,25 +90,29 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
-    @property
-    def fluxmedian(self):
-        flux = np.array([val for date, val in self.arrPhotodiode])
-        fluxmedian = np.median(flux) if len(flux) > 10 else np.nan
-
-        return fluxmedian
-
     def resetValue(self):
 
-        self.attenVal = -1
+        self.attenuator = -1
         self.halogenOn = False
-        self.arrPhotodiode = []
+        self.flux.clear()
 
     def start(self, cmd=None):
         QThread.start(self)
         FSMDev.start(self, cmd=cmd)
 
+        try:
+            self.actor.attachController(name='arc')
+        except Exception as e:
+            cmd.warn('text="%s' % self.actor.strTraceback(e))
+
     def stop(self, cmd=None):
         FSMDev.stop(self, cmd=cmd)
+
+        try:
+            self.actor.detachController(controllerName='arc')
+        except Exception as e:
+            cmd.warn('text="%s' % self.actor.strTraceback(e))
+
         self.exit()
 
     def loadCfg(self, cmd, mode=None):
@@ -86,8 +139,8 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-
-        self.sock = Labspheresim(self.actor) if self.mode == "simulation" else None  # Create new simulator
+        cmd.inform('labsMode=%s' % self.mode)
+        self.sim = Labspheresim(self.actor)
         s = self.connectSock()
 
     def init(self, cmd):
@@ -106,44 +159,55 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
             time.sleep(tempo)
 
-        self.attenVal = 0
+        self.attenuator = 0
 
-    def switchAttenuator(self, cmd, value):
+        self.actor.monitor(controller="labsphere", period=5)
 
-        for cmdStr, tempo in labs.attenuator(value):
-            self.sendOneCommand(cmdStr, cmd=cmd)
-            time.sleep(tempo)
+    def moveAttenuator(self, e):
 
-        self.attenVal = value
+        try:
+            for cmdStr, tempo in labs.attenuator(e.value):
+                self.sendOneCommand(cmdStr, cmd=e.cmd)
+                time.sleep(tempo)
 
-    def switchHalogen(self, cmd, bool):
+            self.attenuator = e.value
+            self.substates.idle(cmd=e.cmd)
 
-        self.sendOneCommand(labs.setLamp(bool), cmd=cmd)
-        self.halogenOn = bool
-        cmd.inform("halogen=%s" % ("on" if self.halogenOn else "off"))
+        except:
+
+            self.substates.fail(cmd=e.cmd)
+            self.attenuator = np.nan
+            raise
+
+    def switchHalogen(self, e):
+        try:
+            self.sendOneCommand(labs.setLamp(e.bool), cmd=e.cmd)
+            self.halogenOn = e.bool
+            self.substates.idle(cmd=e.cmd)
+            e.cmd.inform("halogen=%s" % ("on" if self.halogenOn else "off"))
+        except:
+
+            self.substates.fail(cmd=e.cmd)
+            raise
 
     def getStatus(self, cmd):
 
-        cmd.inform('labsMode=%s' % self.mode)
-
-        # self.actor.getState(cmd)
         if self.states.current == 'ONLINE':
             flux = self.photodiode(cmd=cmd)
 
-            cmd.inform("attenuator=%i" % self.attenVal)
+            cmd.inform("attenuator=%i" % self.attenuator)
             cmd.inform("halogen=%s" % ("on" if self.halogenOn else "off"))
-            cmd.inform("fluxmedian=%.3f" % self.fluxmedian)
-            cmd.inform("photodiode=%.3f" % float(flux))
+            cmd.inform("fluxmedian=%.3f" % self.flux.median)
+            cmd.inform("photodiode=%.3f" % flux)
 
         cmd.finish()
 
     def photodiode(self, cmd):
         flux = self.sendOneCommand(labs.photodiode(), cmd=cmd)
-        flux = flux if flux != '' else np.nan
-        self.arrPhotodiode.append((time.time(), float(flux)))
+        flux = float(flux) if flux != '' else np.nan
 
-        arrPhotodiode = [(date, val) for date, val in self.arrPhotodiode if (time.time() - date) < 60]
-        self.arrPhotodiode = arrPhotodiode
+        self.flux.append((time.time(), flux))
+
         return flux
 
     def createSock(self):
