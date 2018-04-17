@@ -89,7 +89,7 @@ class OurActor(actorcore.ICC.ICC):
     def updateStates(self, cmd, onsubstate=False):
         self.onsubstate = onsubstate if onsubstate and onsubstate != 'IDLE' else self.onsubstate
 
-        cmd.inform('dcbFSM=%s,%s' % (self.state, self.substate))
+        cmd.inform('metaFSM=%s,%s' % (self.state, self.substate))
 
 
 def main():
