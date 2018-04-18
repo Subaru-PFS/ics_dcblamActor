@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import subprocess
 
 import opscore.protocols.keys as keys
 import opscore.protocols.types as types
@@ -83,7 +82,6 @@ class TopCmd(object):
         cmd.inform('text="monitors: %s"' % (self.actor.monitors))
         cmd.inform('text="config id=0x%08x %r"' % (id(self.actor.config),
                                                    self.actor.config.sections()))
-        cmd.inform("version=%s" % subprocess.check_output(["git", "describe"]))
 
         self.actor.updateStates(cmd=cmd)
 
