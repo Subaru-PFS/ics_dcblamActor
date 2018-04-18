@@ -96,9 +96,9 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.halogenOn = False
         self.flux.clear()
 
-    def start(self, cmd=None):
+    def start(self, cmd=None, doInit=False, mode=None):
+        FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
         QThread.start(self)
-        FSMDev.start(self, cmd=cmd)
 
         try:
             self.actor.attachController(name='arc')
@@ -123,14 +123,10 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         :type mode: str
         :raise: Exception Config file badly formatted
         """
-        try:
-            self.actor._reloadConfiguration(cmd=cmd)
-        except RuntimeError:
-            pass
 
         self.host = self.actor.config.get('labsphere', 'host')
         self.port = int(self.actor.config.get('labsphere', 'port'))
-        self.mode = self.actor.config.get('labsphere', 'mode')
+        self.mode = self.actor.config.get('labsphere', 'mode') if mode is None else mode
 
     def startComm(self, cmd):
         """| Start socket with the interlock board or simulate it.

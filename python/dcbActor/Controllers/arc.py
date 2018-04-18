@@ -41,8 +41,8 @@ class arc(FSMDev, QThread):
         return self.controllers["labsphere"].flux
 
     def start(self, cmd=None, doInit=True):
-        QThread.start(self)
         FSMDev.start(self, cmd=cmd, doInit=doInit)
+        QThread.start(self)
 
     def stop(self, cmd=None):
         FSMDev.stop(self, cmd=cmd)

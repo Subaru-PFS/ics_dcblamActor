@@ -39,9 +39,9 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
-    def start(self, cmd=None, doInit=True):
+    def start(self, cmd=None, doInit=True, mode=None):
+        FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
         QThread.start(self)
-        FSMDev.start(self, cmd=cmd, doInit=doInit)
 
     def stop(self, cmd=None):
         FSMDev.stop(self, cmd=cmd)
@@ -55,14 +55,10 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         :type mode: str
         :raise: Exception Config file badly formatted
         """
-        try:
-            self.actor._reloadConfiguration(cmd=cmd)
-        except RuntimeError:
-            pass
 
         self.host = self.actor.config.get('aten', 'host')
         self.port = int(self.actor.config.get('aten', 'port'))
-        self.mode = self.actor.config.get('aten', 'mode')
+        self.mode = self.actor.config.get('aten', 'mode') if mode is None else mode
 
     def startComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
@@ -96,7 +92,7 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
             time.sleep(1)
             return self.checkChannel(cmd, channel)
         else:
-            state = 'on' if ' on' in ret else 'off'
+            state = 'on' if ' on' in ret.split('\r\n')[1] else 'off'
             self.state[channel] = True if state == 'on' else False
             cmd.inform('%s=%s' % (channel, state))
 
@@ -117,9 +113,13 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
 
     def checkVaw(self, cmd):
 
-        v = self.sendOneCommand('read meter dev volt simple', doClose=False, cmd=cmd)
-        a = self.sendOneCommand('read meter dev curr simple', doClose=False, cmd=cmd)
-        w = self.sendOneCommand('read meter dev pow simple', doClose=False, cmd=cmd)
+        voltage = self.sendOneCommand('read meter dev volt simple', doClose=False, cmd=cmd)
+        current = self.sendOneCommand('read meter dev curr simple', doClose=False, cmd=cmd)
+        power = self.sendOneCommand('read meter dev pow simple', doClose=False, cmd=cmd)
+        
+        v = voltage.split('\r\n')[1].strip()
+        a = current.split('\r\n')[1].strip()
+        w = power.split('\r\n')[1].strip()
 
         return v, a, w
 
@@ -134,12 +134,8 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
             s = self.createSock()
             s.settimeout(2.0)
             s.connect((self.host, self.port))
-            self.sock = s
-            try:
-                self.authenticate()
-            except:
-                self.closeSock()
-                raise
+
+            self.sock = self.authenticate(sock=s)
 
         return self.sock
 
@@ -151,22 +147,31 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
 
         return s
 
-    def authenticate(self):
+    def authenticate(self, sock):
+        time.sleep(0.1)
 
-        ret = self.sock.recv(1024)
-        ret = ret.decode()
+        ret = sock.recv(1024).decode('utf-8', 'ignore')
 
         if 'Login: ' not in ret:
             raise ValueError('Could not login')
 
-        ret = self.sendOneCommand('teladmin', doClose=False)
+        sock.sendall('teladmin\r\n'.encode('utf-8'))
+
+        time.sleep(0.1)
+        ret = sock.recv(1024).decode('utf-8', 'ignore')
+
         if 'Password:' not in ret:
             raise ValueError('Bad login')
 
-        ret = self.sendOneCommand('pfsait', doClose=False)
+        sock.sendall('pfsait\r\n'.encode('utf-8'))
+
+        time.sleep(0.1)
+        ret = sock.recv(1024).decode('utf-8', 'ignore')
 
         if 'Logged in successfully' not in ret:
             raise ValueError('Bad password')
+
+        return sock
 
     def handleTimeout(self):
         if self.exitASAP:

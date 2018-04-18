@@ -40,11 +40,11 @@ class Atensim(socket.socket):
 
         elif 'read status' in cmdStr:
             __, __, nb, __ = cmdStr.split(' ')
-            self.buf.append('%s %s\r\n>' % (nb, self.channels[nb]))
+            self.buf.append('%s Outlet %s %s\r\n\r\n> ' % (cmdStr, nb, self.channels[nb]))
 
         elif 'read meter dev' in cmdStr:
             __, __, __, val, __ = cmdStr.split(' ')
-            self.buf.append('%s\r\n>' % self.vals[val])
+            self.buf.append('%s %s\r\n\r\n> '%(cmdStr, self.vals[val]))
 
         elif 'sw o' in cmdStr:
             __, nb, state, __ = cmdStr.split(' ')
