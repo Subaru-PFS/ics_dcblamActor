@@ -39,6 +39,16 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
+    @property
+    def pow_labsphere(self):
+        logsum = sum([1 if self.state[key] else 0 for key in ['pow_attenuator', 'pow_sphere', 'pow_halogen']])
+        if logsum == 3:
+            return 'on'
+        elif logsum == 0:
+            return 'off'
+        else:
+            return 'undef'
+
     def start(self, cmd=None, doInit=True, mode=None):
         FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
         QThread.start(self)
@@ -104,6 +114,7 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
 
             for channel in channels:
                 self.checkChannel(cmd=cmd, channel=channel)
+            cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
 
             v, a, w = self.checkVaw(cmd)
             cmd.inform('atenVAW=%s,%s,%s' % (v, a, w))
@@ -116,7 +127,7 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         voltage = self.sendOneCommand('read meter dev volt simple', doClose=False, cmd=cmd)
         current = self.sendOneCommand('read meter dev curr simple', doClose=False, cmd=cmd)
         power = self.sendOneCommand('read meter dev pow simple', doClose=False, cmd=cmd)
-        
+
         v = voltage.split('\r\n')[1].strip()
         a = current.split('\r\n')[1].strip()
         w = power.split('\r\n')[1].strip()
