@@ -107,6 +107,8 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
             cmd.inform('%s=%s' % (channel, state))
 
     def getStatus(self, cmd):
+        cmd.inform('atenFSM=%s,%s' % (self.states.current, self.substates.current))
+        cmd.inform('atenMode=%s' % self.mode)
 
         channels = [channel for channel in self.actor.config.options('address')]
 

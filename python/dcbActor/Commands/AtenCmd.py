@@ -47,10 +47,6 @@ class AtenCmd(object):
 
         if 'labsphere' in cmdKeys:
             channels = ["pow_attenuator", "pow_sphere", "pow_halogen"]
-            try:
-                self.actor.controllers['labsphere'].resetValue()
-            except:
-                pass
 
         elif "channels" in cmdKeys:
             channels = cmdKeys["channels"].values

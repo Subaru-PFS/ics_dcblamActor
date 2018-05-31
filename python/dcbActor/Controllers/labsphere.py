@@ -62,7 +62,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
                   ]
 
         bufferedSocket.EthComm.__init__(self)
-        QThread.__init__(self, actor, name)
+        QThread.__init__(self, actor, name, timeout=4)
         FSMDev.__init__(self, actor, name, events=events, substates=substates)
 
         self.addStateCB('MOVING', self.moveAttenuator)
@@ -146,7 +146,6 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command
         :raise: Exception if a command fail, user if warned with error
         """
-
         for cmdStr, tempo in labs.init():
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
             time.sleep(tempo)
@@ -172,7 +171,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         except:
 
             self.substates.fail(cmd=e.cmd)
-            self.attenuator = np.nan
+            self.attenuator = -1
             raise
 
     def switchHalogen(self, e):
@@ -187,9 +186,20 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
             raise
 
     def getStatus(self, cmd):
+        cmd.inform('labsphereFSM=%s,%s' % (self.states.current, self.substates.current))
+        cmd.inform('labsphereMode=%s' % self.mode)
 
         if self.states.current == 'ONLINE':
-            flux = self.photodiode(cmd=cmd)
+
+            try:
+                flux = self.photodiode(cmd=cmd)
+            except:
+                self.resetValue()
+                cmd.warn("attenuator=%i" % self.attenuator)
+                cmd.warn("halogen=off")
+                cmd.warn("fluxmedian=nan")
+                cmd.warn("photodiode=nan")
+                raise
 
             cmd.inform("attenuator=%i" % self.attenuator)
             cmd.inform("halogen=%s" % ("on" if self.halogenOn else "off"))
@@ -213,6 +223,12 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
             s = bufferedSocket.EthComm.createSock(self)
 
         return s
+
+    def sendOneCommand(self, *args, **kwargs):
+        if self.actor.controllers['aten'].pow_labsphere != 'on':
+            raise UserWarning('labsphere is not powered on')
+
+        return bufferedSocket.EthComm.sendOneCommand(self, *args, **kwargs)
 
     def handleTimeout(self):
         if self.exitASAP:
