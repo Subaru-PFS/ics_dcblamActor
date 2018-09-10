@@ -1,6 +1,5 @@
 __author__ = 'alefur'
 import logging
-import time
 
 import enuActor.Controllers.bufferedSocket as bufferedSocket
 from actorcore.FSM import FSMDev
@@ -9,6 +8,7 @@ from dcbActor.Controllers.simulator.monosim import Monosim
 
 
 class mono(FSMDev, QThread, bufferedSocket.EthComm):
+    shutterCode = {'O': 'open', 'C':'closed'}
     def __init__(self, actor, name, loglevel=logging.DEBUG):
         """This sets up the connections to/from the hub, the logger, and the twisted reactor.
 
@@ -27,7 +27,6 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
 
         self.mode = ''
         self.sim = None
-
 
     @property
     def simulated(self):
@@ -70,18 +69,52 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         self.sim = Monosim()
         s = self.connectSock()
 
-        self.sendOneCommand('status', doClose=False, cmd=cmd)
-
+        ret = self.sendOneCommand('status', doClose=False, cmd=cmd)
 
     def init(self, cmd):
-        self.actor.monitor(controller="mono", period=60)
+        mode = self.sendOneCommand('init', doClose=False, cmd=cmd)
+        if mode != '1':
+            raise ValueError('Monochromator is not in Handshake mode')
 
     def getStatus(self, cmd):
         cmd.inform('monoFSM=%s,%s' % (self.states.current, self.substates.current))
         cmd.inform('monoMode=%s' % self.mode)
 
-        self.closeSock()
+        if self.states.current == 'ONLINE':
+            shutter = self.getShutter(cmd=cmd)
+            gratingId, linesPerMm, gratingLabel = self.getGrating(cmd=cmd)
+            outport = int(self.getOutport(cmd=cmd))
+            wavelength = float(self.getWavelength(cmd=cmd, doClose=True))
+            cmd.inform('monograting=%d,%.3f,%s' % (int(gratingId), float(linesPerMm), gratingLabel))
+            cmd.inform('monochromator=%s,%d,%.3f'%(shutter, outport, wavelength))
+
         cmd.finish()
+
+    def getShutter(self, cmd, doClose=False):
+        shutter = self.sendOneCommand('getshutter', doClose=doClose, cmd=cmd)
+        return self.shutterCode[shutter]
+
+    def getGrating(self, cmd, doClose=False):
+        return self.sendOneCommand('getgrating', doClose=doClose, cmd=cmd).split(',')
+
+    def getOutport(self, cmd, doClose=False):
+        return self.sendOneCommand('getoutport', doClose=doClose, cmd=cmd)
+
+    def getWavelength(self, cmd, doClose=False):
+        return self.sendOneCommand('getwave', doClose=doClose, cmd=cmd)
+
+    def setShutter(self, cmd, openShutter, doClose=False):
+        func = 'open' if openShutter else 'close'
+        mode = self.sendOneCommand('shutter%s'%func, doClose=doClose, cmd=cmd)
+
+    def setGrating(self, cmd, gratingId, doClose=False):
+        mode = self.sendOneCommand('getgrating,%d'%gratingId, doClose=doClose, cmd=cmd)
+
+    def setOutport(self, cmd, outportId, doClose=False):
+        mode = self.sendOneCommand('getoutport,%d'%outportId, doClose=doClose, cmd=cmd)
+
+    def setWavelength(self, cmd, wavelength, doClose=False):
+        mode = self.sendOneCommand('setwave,%.3f'%wavelength, doClose=doClose, cmd=cmd)
 
     def sendOneCommand(self, cmdStr, doClose=True, cmd=None):
         reply = bufferedSocket.EthComm.sendOneCommand(self, cmdStr=cmdStr, doClose=doClose, cmd=cmd)
@@ -91,7 +124,6 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
             raise UserWarning(ret)
 
         return ret
-
 
     def createSock(self):
         if self.simulated:
