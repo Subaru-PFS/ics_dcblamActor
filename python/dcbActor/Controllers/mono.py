@@ -8,7 +8,8 @@ from dcbActor.Controllers.simulator.monosim import Monosim
 
 
 class mono(FSMDev, QThread, bufferedSocket.EthComm):
-    shutterCode = {'O': 'open', 'C':'closed'}
+    shutterCode = {'O': 'open', 'C': 'closed'}
+
     def __init__(self, actor, name, loglevel=logging.DEBUG):
         """This sets up the connections to/from the hub, the logger, and the twisted reactor.
 
@@ -37,7 +38,7 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
-    def start(self, cmd=None, doInit=True, mode=None):
+    def start(self, cmd=None, doInit=False, mode=None):
         FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
         QThread.start(self)
 
@@ -84,9 +85,9 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
             shutter = self.getShutter(cmd=cmd)
             gratingId, linesPerMm, gratingLabel = self.getGrating(cmd=cmd)
             outport = int(self.getOutport(cmd=cmd))
-            wavelength = float(self.getWavelength(cmd=cmd, doClose=True))
+            wavelength = float(self.getWave(cmd=cmd, doClose=True))
             cmd.inform('monograting=%d,%.3f,%s' % (int(gratingId), float(linesPerMm), gratingLabel))
-            cmd.inform('monochromator=%s,%d,%.3f'%(shutter, outport, wavelength))
+            cmd.inform('monochromator=%s,%d,%.3f' % (shutter, outport, wavelength))
 
         cmd.finish()
 
@@ -100,21 +101,21 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
     def getOutport(self, cmd, doClose=False):
         return self.sendOneCommand('getoutport', doClose=doClose, cmd=cmd)
 
-    def getWavelength(self, cmd, doClose=False):
+    def getWave(self, cmd, doClose=False):
         return self.sendOneCommand('getwave', doClose=doClose, cmd=cmd)
 
     def setShutter(self, cmd, openShutter, doClose=False):
         func = 'open' if openShutter else 'close'
-        mode = self.sendOneCommand('shutter%s'%func, doClose=doClose, cmd=cmd)
+        self.sendOneCommand('shutter%s' % func, doClose=doClose, cmd=cmd)
 
     def setGrating(self, cmd, gratingId, doClose=False):
-        mode = self.sendOneCommand('getgrating,%d'%gratingId, doClose=doClose, cmd=cmd)
+        self.sendOneCommand('setgrating,%d' % gratingId, doClose=doClose, cmd=cmd)
 
     def setOutport(self, cmd, outportId, doClose=False):
-        mode = self.sendOneCommand('getoutport,%d'%outportId, doClose=doClose, cmd=cmd)
+        self.sendOneCommand('setoutport,%d' % outportId, doClose=doClose, cmd=cmd)
 
-    def setWavelength(self, cmd, wavelength, doClose=False):
-        mode = self.sendOneCommand('setwave,%.3f'%wavelength, doClose=doClose, cmd=cmd)
+    def setWave(self, cmd, wavelength, doClose=False):
+        self.sendOneCommand('setwave,%.3f' % wavelength, doClose=doClose, cmd=cmd)
 
     def sendOneCommand(self, cmdStr, doClose=True, cmd=None):
         reply = bufferedSocket.EthComm.sendOneCommand(self, cmdStr=cmdStr, doClose=doClose, cmd=cmd)
