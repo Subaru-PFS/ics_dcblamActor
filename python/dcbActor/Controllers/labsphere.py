@@ -209,8 +209,8 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         cmd.finish()
 
     def photodiode(self, cmd):
-        flux = self.sendOneCommand(labs.photodiode(), cmd=cmd)
-        flux = float(flux) if flux != '' else np.nan
+        footLamberts = self.sendOneCommand(labs.photodiode(), cmd=cmd)
+        flux = np.round(float(footLamberts) * 3.426, 3) if footLamberts != '' else np.nan
 
         self.flux.append((time.time(), flux))
 
