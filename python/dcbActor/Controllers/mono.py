@@ -1,6 +1,6 @@
 __author__ = 'alefur'
 import logging
-
+from opscore.utility.qstr import qstr
 import enuActor.Controllers.bufferedSocket as bufferedSocket
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
@@ -23,7 +23,7 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
 
-        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n')
+        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=30.0)
         self.EOL = '\r\n'
 
         self.mode = ''
@@ -38,7 +38,7 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
-    def start(self, cmd=None, doInit=False, mode=None):
+    def start(self, cmd=None, doInit=True, mode=None):
         FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
         QThread.start(self)
 
@@ -70,26 +70,36 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         self.sim = Monosim()
         s = self.connectSock()
 
-        ret = self.sendOneCommand('status', doClose=False, cmd=cmd)
+        controllerStatus = self.sendOneCommand('status', doClose=True, cmd=cmd)
+        cmd.inform('text=%s' % qstr(controllerStatus))
 
     def init(self, cmd):
-        mode = self.sendOneCommand('init', doClose=False, cmd=cmd)
-        if mode != '1':
-            raise ValueError('Monochromator is not in Handshake mode')
+        pass
 
     def getStatus(self, cmd):
         cmd.inform('monoFSM=%s,%s' % (self.states.current, self.substates.current))
         cmd.inform('monoMode=%s' % self.mode)
 
         if self.states.current == 'ONLINE':
+            status, error = self.getError(cmd=cmd)
             shutter = self.getShutter(cmd=cmd)
             gratingId, linesPerMm, gratingLabel = self.getGrating(cmd=cmd)
             outport = int(self.getOutport(cmd=cmd))
             wavelength = float(self.getWave(cmd=cmd, doClose=True))
+            if error:
+                cmd.warn('text=%s' % qstr(error))
+
             cmd.inform('monograting=%d,%.3f,%s' % (int(gratingId), float(linesPerMm), gratingLabel))
-            cmd.inform('monochromator=%s,%d,%.3f' % (shutter, outport, wavelength))
+            cmd.inform('monochromator=%s,%s,%d,%.3f' % (status, shutter, outport, wavelength))
 
         cmd.finish()
+
+    def getError(self, cmd, doClose=False):
+        error = self.sendOneCommand('geterror', doClose=doClose, cmd=cmd)
+        status = 'ERROR' if error != 'OK' else 'OK'
+        error = error if error != 'OK' else ''
+
+        return status, error
 
     def getShutter(self, cmd, doClose=False):
         shutter = self.sendOneCommand('getshutter', doClose=doClose, cmd=cmd)

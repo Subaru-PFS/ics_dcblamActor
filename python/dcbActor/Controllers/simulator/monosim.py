@@ -10,7 +10,6 @@ class Monosim(socket.socket):
         self.recv = self.fakeRecv
 
         self.buf = []
-        self.handshake = 0
         self.shutterOpen = False
         self.grating = 1
         self.outport = 1
@@ -34,9 +33,8 @@ class Monosim(socket.socket):
         if funcname == 'status':
             self.buf.append('0,Oriel monochromator\r\n')
 
-        elif funcname == 'init':
-            self.handshake = 1
-            self.buf.append('0,%d\r\n' % self.handshake)
+        elif funcname == 'geterror':
+            self.buf.append('0,OK\r\n')
 
         elif funcname == 'getshutter':
             shutter = 'O' if self.shutterOpen else 'C'
@@ -61,7 +59,7 @@ class Monosim(socket.socket):
 
         elif funcname == 'setgrating':
             self.grating = int(args[0])
-            self.buf.append('0,%d,1200,BLUE\r\n' % self.grating)
+            self.buf.append('0,%d,1200,600.00\r\n' % self.grating)
 
         elif funcname == 'setoutport':
             self.outport = int(args[0])
