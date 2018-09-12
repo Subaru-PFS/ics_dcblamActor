@@ -1,10 +1,11 @@
 __author__ = 'alefur'
 import logging
-from opscore.utility.qstr import qstr
+
 import enuActor.Controllers.bufferedSocket as bufferedSocket
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
 from dcbActor.Controllers.simulator.monosim import Monosim
+from opscore.utility.qstr import qstr
 
 
 class mono(FSMDev, QThread, bufferedSocket.EthComm):
@@ -16,9 +17,21 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         :param actor: spsaitActor
         :param name: controller name
         """
+        substates = ['IDLE', 'MOVING', 'OPENING', 'CLOSING', 'FAILED']
+        events = [{'name': 'setgrating', 'src': 'IDLE', 'dst': 'MOVING'},
+                  {'name': 'openshutter', 'src': 'IDLE', 'dst': 'OPENING'},
+                  {'name': 'closeshutter', 'src': 'IDLE', 'dst': 'CLOSING'},
+                  {'name': 'idle', 'src': ['MOVING', 'OPENING', 'CLOSING'], 'dst': 'IDLE'},
+                  {'name': 'fail', 'src': ['MOVING', 'OPENING', 'CLOSING'], 'dst': 'FAILED'},
+                  ]
+
         bufferedSocket.EthComm.__init__(self)
         QThread.__init__(self, actor, name)
-        FSMDev.__init__(self, actor, name)
+        FSMDev.__init__(self, actor, name, events=events, substates=substates)
+
+        self.addStateCB('MOVING', self.setGrating)
+        self.addStateCB('OPENING', self.openShutter)
+        self.addStateCB('CLOSING', self.closeShutter)
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
@@ -114,12 +127,29 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
     def getWave(self, cmd, doClose=False):
         return self.sendOneCommand('getwave', doClose=doClose, cmd=cmd)
 
-    def setShutter(self, cmd, openShutter, doClose=False):
-        func = 'open' if openShutter else 'close'
-        self.sendOneCommand('shutter%s' % func, doClose=doClose, cmd=cmd)
+    def openShutter(self, e):
+        try:
+            self.sendOneCommand('shutteropen', doClose=False, cmd=e.cmd)
+            self.substates.idle(cmd=e.cmd)
+        except:
+            self.substates.fail(cmd=e.cmd)
+            raise
 
-    def setGrating(self, cmd, gratingId, doClose=False):
-        self.sendOneCommand('setgrating,%d' % gratingId, doClose=doClose, cmd=cmd)
+    def closeShutter(self, e):
+        try:
+            self.sendOneCommand('shutterclose', doClose=False, cmd=e.cmd)
+            self.substates.idle(cmd=e.cmd)
+        except:
+            self.substates.fail(cmd=e.cmd)
+            raise
+
+    def setGrating(self, e):
+        try:
+            self.sendOneCommand('setgrating,%d' % e.gratingId, doClose=False, cmd=e.cmd)
+            self.substates.idle(cmd=e.cmd)
+        except:
+            self.substates.fail(cmd=e.cmd)
+            raise
 
     def setOutport(self, cmd, outportId, doClose=False):
         self.sendOneCommand('setoutport,%d' % outportId, doClose=doClose, cmd=cmd)

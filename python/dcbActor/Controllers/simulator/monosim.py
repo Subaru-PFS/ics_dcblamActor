@@ -41,7 +41,7 @@ class Monosim(socket.socket):
             self.buf.append('0,%s\r\n' % shutter)
 
         elif funcname == 'getgrating':
-            self.buf.append('0,%d,1200,BLUE\r\n' % self.grating)
+            self.buf.append('0,%d,1200,600.00\r\n' % self.grating)
 
         elif funcname == 'getoutport':
             self.buf.append('0,%d\r\n' % self.outport)
@@ -59,6 +59,7 @@ class Monosim(socket.socket):
 
         elif funcname == 'setgrating':
             self.grating = int(args[0])
+            time.sleep(6)
             self.buf.append('0,%d,1200,600.00\r\n' % self.grating)
 
         elif funcname == 'setoutport':

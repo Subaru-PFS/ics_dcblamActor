@@ -59,9 +59,11 @@ class MonoCmd(object):
         """Open/close , optional keyword force to force transition (without breaking interlock)"""
         cmdKeys = cmd.cmd.keywords
 
-        openShutter = True if "open" in cmdKeys else "close"
+        if "open" in cmdKeys:
+            self.controller.substates.openshutter(cmd=cmd)
+        else:
+            self.controller.substates.closeshutter(cmd=cmd)
 
-        self.controller.setShutter(cmd=cmd, openShutter=openShutter)
         self.controller.getStatus(cmd)
 
     @threaded
@@ -70,8 +72,7 @@ class MonoCmd(object):
 
         cmdKeys = cmd.cmd.keywords
         gratingId = int(cmdKeys["grating"].values[0])
-
-        self.controller.setGrating(cmd=cmd, gratingId=gratingId)
+        self.controller.substates.setgrating(cmd=cmd, gratingId=gratingId)
         self.controller.getStatus(cmd)
 
     @threaded
