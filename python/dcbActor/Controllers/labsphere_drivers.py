@@ -9,7 +9,7 @@ def attenuator(value):
 
     cmdStr = ''.join(['%s%i' % (logic[bit], len(bits) - i) for i, bit in enumerate(bits)])
 
-    coll = [('P1%sX' % cmdStr, 1.0), ('K2K1X', 1.0), ('P2K3X', 1.0), ('P2J3X', 0.0)]
+    coll = [('P1%sX' % cmdStr, 0.5), ('K2K1X', 0.50), ('P2K3X', 0.5), ('P2J3X', 0.0)]
 
     return coll
 
@@ -24,13 +24,13 @@ def photodiode():
 
 
 def init():
-    coll = [('L0X', 1.0),  # Remote control mode
-            ('Z1X', 1.0),  # Turn off zero mdde
-            ('A0X', 1.0),  # Auto ranging mode
-            ('N1X', 1.0),  # Normalize mode
-            ('H1X', 1.0),  # Display 4 digits
-            ('F1X', 1.0),  # Turn off Digital filter
-            ('C1X', 1.0),  # Default current mode
+    coll = [('L0X', 0.5),  # Remote control mode
+            ('Z1X', 0.5),  # Turn off zero mdde
+            ('A0X', 0.5),  # Auto ranging mode
+            ('N1X', 0.5),  # Normalize mode
+            ('H1X', 0.5),  # Display 4 digits
+            ('F1X', 0.5),  # Turn off Digital filter
+            ('C2X', 0.5),  # Default current mode
             ('P3K1X', 0)]  # switch lamp off
 
     return coll

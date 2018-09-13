@@ -71,7 +71,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
 
-        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r\n')
+        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r\n', timeout=1.0)
         self.EOL = ''
         self.sock = None
 
@@ -150,11 +150,11 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
             time.sleep(tempo)
 
-        for cmdStr, tempo in labs.fullOpen():
+        for cmdStr, tempo in labs.fullClose():
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
             time.sleep(tempo)
 
-        self.attenuator = 0
+        self.attenuator = 255
 
         self.actor.monitor(controller="labsphere", period=5)
 
