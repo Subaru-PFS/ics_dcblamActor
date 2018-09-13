@@ -1,8 +1,20 @@
 import socket
 import time
 
+import numpy as np
+
 
 class Monosim(socket.socket):
+    errorCodes = {0: 'Command not understood',
+                  1: 'System error (miscellaneous)',
+                  2: 'Bad parameter used in Command',
+                  3: 'Destination position for wavelength motion not allowed',
+                  6: 'Accessory not present (usually filter wheel)',
+                  7: 'Accessory already in specified position',
+                  8: 'Could not home wavelength drive',
+                  9: 'Label too long',
+                  10: 'OK'
+                  }
 
     def __init__(self):
         socket.socket.__init__(self, socket.AF_INET, socket.SOCK_STREAM)
@@ -34,7 +46,8 @@ class Monosim(socket.socket):
             self.buf.append('0,Oriel monochromator\r\n')
 
         elif funcname == 'geterror':
-            self.buf.append('0,OK\r\n')
+            error = self.errorCodes[np.random.randint(11)]
+            self.buf.append('0,%s\r\n' % error)
 
         elif funcname == 'getshutter':
             shutter = 'O' if self.shutterOpen else 'C'
@@ -71,7 +84,7 @@ class Monosim(socket.socket):
             self.buf.append('0,%.3f\r\n' % self.wavelength)
 
         else:
-            self.buf.append('1,unknown command %s\r\n'%cmdStr)
+            self.buf.append('1,unknown command %s\r\n' % cmdStr)
 
     def fakeRecv(self, buffer_size):
         ret = self.buf[0]

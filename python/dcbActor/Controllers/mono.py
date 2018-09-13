@@ -94,32 +94,28 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         cmd.inform('monoMode=%s' % self.mode)
 
         if self.states.current == 'ONLINE':
-            status, error = self.getError(cmd=cmd)
+            error = self.getError(cmd=cmd)
             shutter = self.getShutter(cmd=cmd)
-            gratingId, linesPerMm, gratingLabel = self.getGrating(cmd=cmd)
+            grating = self.getGrating(cmd=cmd)
             outport = int(self.getOutport(cmd=cmd))
             wavelength = float(self.getWave(cmd=cmd, doClose=True))
-            if error:
-                cmd.warn('text=%s' % qstr(error))
+            talk = cmd.inform if error == 'OK' else cmd.warn
+            talk('monoerror=%s' % qstr(error))
 
-            cmd.inform('monograting=%d,%.3f,%s' % (int(gratingId), float(linesPerMm), gratingLabel))
-            cmd.inform('monochromator=%s,%s,%d,%.3f' % (status, shutter, outport, wavelength))
+            cmd.inform('monograting=%s' % grating)
+            cmd.inform('monochromator=%s,%d,%.3f' % (shutter, outport, wavelength))
 
         cmd.finish()
 
     def getError(self, cmd, doClose=False):
-        error = self.sendOneCommand('geterror', doClose=doClose, cmd=cmd)
-        status = 'ERROR' if error != 'OK' else 'OK'
-        error = error if error != 'OK' else ''
-
-        return status, error
+        return self.sendOneCommand('geterror', doClose=doClose, cmd=cmd)
 
     def getShutter(self, cmd, doClose=False):
         shutter = self.sendOneCommand('getshutter', doClose=doClose, cmd=cmd)
         return self.shutterCode[shutter]
 
     def getGrating(self, cmd, doClose=False):
-        return self.sendOneCommand('getgrating', doClose=doClose, cmd=cmd).split(',')
+        return self.sendOneCommand('getgrating', doClose=doClose, cmd=cmd)
 
     def getOutport(self, cmd, doClose=False):
         return self.sendOneCommand('getoutport', doClose=doClose, cmd=cmd)
