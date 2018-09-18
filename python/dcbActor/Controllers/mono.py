@@ -55,8 +55,19 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
         QThread.start(self)
 
+        try:
+            self.actor.attachController(name='powarc')
+        except Exception as e:
+            cmd.warn('text="%s' % self.actor.strTraceback(e))
+
     def stop(self, cmd=None):
         FSMDev.stop(self, cmd=cmd)
+
+        try:
+            self.actor.detachController(controllerName='powarc')
+        except Exception as e:
+            cmd.warn('text="%s' % self.actor.strTraceback(e))
+
         self.exit()
 
     def loadCfg(self, cmd, mode=None):
@@ -85,9 +96,6 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
 
         controllerStatus = self.sendOneCommand('status', doClose=True, cmd=cmd)
         cmd.inform('text=%s' % qstr(controllerStatus))
-
-    def init(self, cmd):
-        pass
 
     def getStatus(self, cmd):
         cmd.inform('monoFSM=%s,%s' % (self.states.current, self.substates.current))
@@ -154,6 +162,9 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         self.sendOneCommand('setwave,%.3f' % wavelength, doClose=doClose, cmd=cmd)
 
     def sendOneCommand(self, cmdStr, doClose=True, cmd=None):
+        if not self.actor.controllers['aten'].pow_mono:
+            raise UserWarning('monochromator is not powered on')
+
         reply = bufferedSocket.EthComm.sendOneCommand(self, cmdStr=cmdStr, doClose=doClose, cmd=cmd)
         error, ret = reply.split(',', 1)
 
