@@ -49,6 +49,10 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         else:
             return 'undef'
 
+    @property
+    def pow_mono(self):
+        return self.state['pow_mono']
+
     def start(self, cmd=None, doInit=True, mode=None):
         FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
         QThread.start(self)
@@ -80,9 +84,6 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         cmd.inform('atenMode=%s' % self.mode)
         self.sim = Atensim()
         s = self.connectSock()
-
-    def init(self, cmd):
-        self.actor.monitor(controller="aten", period=60)
 
     def switch(self, cmd, channel, bool):
         bool = 'on' if bool else 'off'

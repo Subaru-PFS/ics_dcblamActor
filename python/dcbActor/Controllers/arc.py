@@ -1,8 +1,9 @@
 import logging
 import time
-
+from functools import partial
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
+from twisted.internet import reactor
 
 
 class arc(FSMDev, QThread):
@@ -40,7 +41,7 @@ class arc(FSMDev, QThread):
     def flux(self):
         return self.controllers["labsphere"].flux
 
-    def start(self, cmd=None, doInit=True):
+    def start(self, cmd=None, doInit=True, mode=None):
         FSMDev.start(self, cmd=cmd, doInit=doInit)
         QThread.start(self)
 
@@ -50,6 +51,7 @@ class arc(FSMDev, QThread):
 
     def switchArc(self, e):
         force = True if not e.switchOn else e.force
+        reactor.callLater(1, partial(self.setSampling, 5))
 
         try:
             nextState = self.state
@@ -83,6 +85,10 @@ class arc(FSMDev, QThread):
         except:
             self.substates.fail(cmd=e.cmd)
             raise
+        finally:
+            reactor.callLater(1, partial(self.setSampling, 15))
+
+
 
     def handleTimeout(self):
         if self.exitASAP:

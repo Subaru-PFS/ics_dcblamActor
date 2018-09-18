@@ -71,7 +71,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
 
-        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r\n', timeout=1.0)
+        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=1.0)
         self.EOL = ''
         self.sock = None
 
@@ -80,6 +80,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
 
         self.flux = Flux()
         self.resetValue()
+        self.defaultSamptime = 15
 
     @property
     def simulated(self):
@@ -156,8 +157,6 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
 
         self.attenuator = 255
 
-        self.actor.monitor(controller="labsphere", period=5)
-
     def moveAttenuator(self, e):
 
         try:
@@ -179,7 +178,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
             self.sendOneCommand(labs.setLamp(e.bool), cmd=e.cmd)
             self.halogenOn = e.bool
             self.substates.idle(cmd=e.cmd)
-            e.cmd.inform("halogen=%s" % ("on" if self.halogenOn else "off"))
+            e.cmd.inform('halogen=%s' % ('on' if self.halogenOn else 'off'))
         except:
 
             self.substates.fail(cmd=e.cmd)
@@ -195,16 +194,16 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
                 flux = self.photodiode(cmd=cmd)
             except:
                 self.resetValue()
-                cmd.warn("attenuator=%i" % self.attenuator)
-                cmd.warn("halogen=off")
-                cmd.warn("fluxmedian=nan")
-                cmd.warn("photodiode=nan")
+                cmd.warn('attenuator=%i' % self.attenuator)
+                cmd.warn('halogen=off')
+                cmd.warn('fluxmedian=nan')
+                cmd.warn('photodiode=nan')
                 raise
 
-            cmd.inform("attenuator=%i" % self.attenuator)
-            cmd.inform("halogen=%s" % ("on" if self.halogenOn else "off"))
-            cmd.inform("fluxmedian=%.3f" % self.flux.median)
-            cmd.inform("photodiode=%.3f" % flux)
+            cmd.inform('attenuator=%i' % self.attenuator)
+            cmd.inform('halogen=%s' % ('on' if self.halogenOn else 'off'))
+            cmd.inform('fluxmedian=%.3f' % self.flux.median)
+            cmd.inform('photodiode=%.3f' % flux)
 
         cmd.finish()
 

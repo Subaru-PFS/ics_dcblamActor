@@ -18,7 +18,8 @@ class ArcCmd(object):
         #
         self.name = 'arc'
         self.vocab = [
-            ('arc', '[<on>] [<off>] [<attenuator>] [force]', self.switch)
+            ('arc', '[<on>] [<off>] [<attenuator>] [force]', self.switch),
+            ('arc', 'status', self.status)
         ]
 
         # Define typed command arguments for the above commands.
