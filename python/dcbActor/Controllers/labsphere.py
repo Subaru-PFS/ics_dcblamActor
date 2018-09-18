@@ -98,8 +98,8 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.flux.clear()
 
     def start(self, cmd=None, doInit=False, mode=None):
-        FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
         QThread.start(self)
+        FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
 
         try:
             self.actor.attachController(name='arc')
