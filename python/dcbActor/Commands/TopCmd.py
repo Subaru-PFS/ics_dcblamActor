@@ -17,7 +17,7 @@ class TopCmd(object):
         #
         self.vocab = [
             ('ping', '', self.ping),
-            ('status', '[@all]', self.status),
+            ('status', '[@all] [<controllers>]', self.status),
             ('monitor', '<controllers> <period>', self.monitor),
             ('set', '<controller> <mode>', self.changeMode)
         ]
@@ -38,14 +38,16 @@ class TopCmd(object):
 
     def monitor(self, cmd):
         """ Enable/disable/adjust period controller monitors. """
-
-        period = cmd.cmd.keywords['period'].values[0]
-        controllers = cmd.cmd.keywords['controllers'].values
+        cmdKeys = cmd.cmd.keywords
+        period = cmdKeys['period'].values[0]
+        controllers = cmdKeys['controllers'].values
 
         knownControllers = []
         for c in self.actor.config.get(self.actor.name, 'controllers').split(','):
             c = c.strip()
             knownControllers.append(c)
+
+        knownControllers = [c.strip() for c in self.actor.config.get(self.actor.name, 'controllers').split(',')]
 
         foundOne = False
         for c in controllers:
@@ -75,7 +77,7 @@ class TopCmd(object):
 
     def status(self, cmd):
         """Report camera status and actor version. """
-
+        cmdKeys = cmd.cmd.keywords
         self.actor.sendVersionKey(cmd)
 
         cmd.inform('text=%s' % ("Present!"))
@@ -85,9 +87,12 @@ class TopCmd(object):
 
         self.actor.updateStates(cmd=cmd)
 
-        if 'all' in cmd.cmd.keywords:
-            for c in self.actor.controllers:
-                self.actor.callCommand("%s status" % (c))
+        if 'all' in cmdKeys:
+            for controller in self.actor.controllers:
+                self.actor.callCommand("%s status" % controller)
+        if 'controllers' in cmdKeys:
+            for controller in cmdKeys['controllers'].values:
+                self.actor.callCommand("%s status" % controller)
 
         cmd.finish(self.controllerKey())
 
@@ -95,8 +100,8 @@ class TopCmd(object):
         """Change device mode operation|simulation"""
         cmdKeys = cmd.cmd.keywords
 
-        controller = cmd.cmd.keywords['controller'].values[0]
-        mode = cmd.cmd.keywords['mode'].values[0]
+        controller = cmdKeys['controller'].values[0]
+        mode = cmdKeys['mode'].values[0]
 
         knownControllers = [c.strip() for c in self.actor.config.get(self.actor.name, 'controllers').split(',')]
 
@@ -105,7 +110,6 @@ class TopCmd(object):
 
         if mode not in ['operation', 'simulation']:
             raise ValueError('unknown mode')
-
 
         self.actor.attachController(name=controller,
                                     cmd=cmd,
