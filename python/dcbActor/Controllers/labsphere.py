@@ -147,22 +147,19 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command
         :raise: Exception if a command fail, user if warned with error
         """
-        for cmdStr, tempo in labs.init():
+        for cmdStr in labs.init():
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
-            time.sleep(tempo)
 
-        for cmdStr, tempo in labs.fullClose():
+        for cmdStr in labs.fullClose():
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
-            time.sleep(tempo)
 
         self.attenuator = 255
 
     def moveAttenuator(self, e):
 
         try:
-            for cmdStr, tempo in labs.attenuator(e.value):
+            for cmdStr in labs.attenuator(e.value):
                 self.sendOneCommand(cmdStr, cmd=e.cmd)
-                time.sleep(tempo)
 
             self.attenuator = e.value
             self.substates.idle(cmd=e.cmd)

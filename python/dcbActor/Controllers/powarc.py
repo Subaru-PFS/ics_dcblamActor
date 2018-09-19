@@ -94,7 +94,6 @@ class powarc(FSMDev, QThread, bufferedSocket.EthComm):
 
         cmd.inform('powarcVAW=%s,%s,%s' % self.checkVaw(cmd))
 
-
     def switch(self, cmd, bool):
         cmdStr = 'START' if bool else 'STOP'
         self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)

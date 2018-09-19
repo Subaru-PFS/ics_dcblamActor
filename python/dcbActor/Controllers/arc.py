@@ -24,6 +24,7 @@ class arc(FSMDev, QThread):
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
+        self.defaultSamptime = 0
 
     @property
     def controllers(self):
