@@ -14,10 +14,15 @@ def attenuator(value):
     return coll
 
 
-def setLamp(boolean):
-    cmdStr = 'P3J1X' if boolean else 'P3K1X'
-    return cmdStr
+def turnQth(state):
+    if state == 'on':
+        cmdStr = 'P3J1X'
+    elif state == 'off':
+        cmdStr = 'P3K1X'
+    else:
+        raise ValueError('%s does not exist' % state)
 
+    return cmdStr
 
 def photodiode():
     return 'O0X'

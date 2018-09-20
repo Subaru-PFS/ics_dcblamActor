@@ -1,15 +1,15 @@
 import logging
 import time
 
-import dcbActor.Controllers.labsphere_drivers as labs
+import dcbActor.Controllers.labsphere_drivers as labsDrivers
 import enuActor.Controllers.bufferedSocket as bufferedSocket
 import numpy as np
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
-from dcbActor.Controllers.simulator.labsim import Labspheresim
+from dcbActor.Controllers.simulator.labsphere import Labspheresim
 
 
-class Flux(list):
+class SmoothFlux(list):
     def __init__(self):
         list.__init__(self)
 
@@ -36,9 +36,9 @@ class Flux(list):
 
     def append(self, object):
         list.append(self, object)
-        self.clearOld()
+        self.smoothOut()
 
-    def clearOld(self, outdated=60):
+    def smoothOut(self, outdated=60):
         i = 0
         while i < len(self):
             if (time.time() - self[i][0]) > outdated:
@@ -78,8 +78,10 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.mode = ''
         self.sim = None
 
-        self.flux = Flux()
-        self.resetValue()
+        self.smoothFlux = SmoothFlux()
+        self.attenuator = -1
+        self.halogen = 'undef'
+
         self.defaultSamptime = 15
 
     @property
@@ -91,11 +93,9 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
-    def resetValue(self):
-
-        self.attenuator = -1
-        self.halogenOn = False
-        self.flux.clear()
+    @property
+    def halogenOn(self):
+        return self.halogen == 'on'
 
     def start(self, cmd=None, doInit=False, mode=None):
         QThread.start(self)
@@ -139,6 +139,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         cmd.inform('labsMode=%s' % self.mode)
         self.sim = Labspheresim(self.actor)
         s = self.connectSock()
+        flux = self.photodiode(cmd=cmd)
 
     def init(self, cmd):
         """| Initialise the interlock board, called y device.initDevice().
@@ -147,18 +148,21 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command
         :raise: Exception if a command fail, user if warned with error
         """
-        for cmdStr in labs.init():
+        for cmdStr in labsDrivers.init():
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
 
-        for cmdStr in labs.fullClose():
+        for cmdStr in labsDrivers.fullClose():
             self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
+
+        self.sendOneCommand(labsDrivers.turnQth(state='off'), doClose=False, cmd=cmd)
 
         self.attenuator = 255
+        self.halogen = 'off'
 
     def moveAttenuator(self, e):
 
         try:
-            for cmdStr in labs.attenuator(e.value):
+            for cmdStr in labsDrivers.attenuator(e.value):
                 self.sendOneCommand(cmdStr, cmd=e.cmd)
 
             self.attenuator = e.value
@@ -172,12 +176,13 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
 
     def switchHalogen(self, e):
         try:
-            self.sendOneCommand(labs.setLamp(e.bool), cmd=e.cmd)
-            self.halogenOn = e.bool
+            self.sendOneCommand(labsDrivers.turnQth(state=e.state), cmd=e.cmd)
+            state = 'on' if e.bool else 'off'
+            self.halogen = state
             self.substates.idle(cmd=e.cmd)
-            e.cmd.inform('halogen=%s' % ('on' if self.halogenOn else 'off'))
+            e.cmd.inform('halogen=%s' % self.halogen)
         except:
-
+            self.halogen = 'undef'
             self.substates.fail(cmd=e.cmd)
             raise
 
@@ -185,30 +190,29 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         cmd.inform('labsphereFSM=%s,%s' % (self.states.current, self.substates.current))
         cmd.inform('labsphereMode=%s' % self.mode)
 
-        if self.states.current == 'ONLINE':
+        if self.states.current in ['LOADED', 'ONLINE']:
 
             try:
-                flux = self.photodiode(cmd=cmd)
+                self.flux = self.photodiode(cmd=cmd)
+
             except:
-                self.resetValue()
-                cmd.warn('attenuator=%i' % self.attenuator)
-                cmd.warn('halogen=off')
-                cmd.warn('fluxmedian=nan')
-                cmd.warn('photodiode=nan')
+                self.flux = np.nan
+                self.smoothFlux.clear()
                 raise
 
-            cmd.inform('attenuator=%i' % self.attenuator)
-            cmd.inform('halogen=%s' % ('on' if self.halogenOn else 'off'))
-            cmd.inform('fluxmedian=%.3f' % self.flux.median)
-            cmd.inform('photodiode=%.3f' % flux)
+            finally:
+                cmd.inform('attenuator=%i' % self.attenuator)
+                cmd.inform('halogen=%s' % self.halogen)
+                cmd.inform('fluxmedian=%.3f' % self.smoothFlux.median)
+                cmd.inform('photodiode=%.3f' % self.flux)
 
         cmd.finish()
 
     def photodiode(self, cmd):
-        footLamberts = self.sendOneCommand(labs.photodiode(), cmd=cmd)
-        flux = np.round(float(footLamberts) * 3.426, 3) if footLamberts != '' else np.nan
+        footLamberts = self.sendOneCommand(labsDrivers.photodiode(), cmd=cmd)
+        flux = np.round(float(footLamberts) * 3.426, 3)
 
-        self.flux.append((time.time(), flux))
+        self.smoothFlux.append((time.time(), flux))
 
         return flux
 

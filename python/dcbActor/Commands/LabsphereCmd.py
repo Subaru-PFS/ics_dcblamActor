@@ -62,7 +62,7 @@ class LabsphereCmd(object):
     def switchHalogen(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
-        bool = True if 'on' in cmdKeys else False
+        state = 'on' if 'on' in cmdKeys else 'off'
 
-        self.controller.substates.halogen(cmd=cmd, bool=bool)
+        self.controller.substates.halogen(cmd=cmd, state=state)
         self.controller.getStatus(cmd)
