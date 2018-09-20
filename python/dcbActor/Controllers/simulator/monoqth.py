@@ -2,7 +2,7 @@ import socket
 import time
 
 
-class Powarcsim(socket.socket):
+class Monoqthsim(socket.socket):
     def __init__(self):
         socket.socket.__init__(self, socket.AF_INET, socket.SOCK_STREAM)
         self.sendall = self.fakeSend

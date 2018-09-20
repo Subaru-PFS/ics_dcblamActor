@@ -5,7 +5,7 @@ import time
 import enuActor.Controllers.bufferedSocket as bufferedSocket
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
-from dcbActor.Controllers.simulator.atensim import Atensim
+from dcbActor.Controllers.simulator.aten import Atensim
 
 
 class aten(FSMDev, QThread, bufferedSocket.EthComm):

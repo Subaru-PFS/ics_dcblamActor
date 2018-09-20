@@ -3,14 +3,14 @@ import logging
 import enuActor.Controllers.bufferedSocket as bufferedSocket
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
-from dcbActor.Controllers.simulator.powarcsim import Powarcsim
+from dcbActor.Controllers.simulator.monoqth import Monoqthsim
 
 
 def getBit(word, ind):
     return not (not (2 ** ind) & word)
 
 
-class powarc(FSMDev, QThread, bufferedSocket.EthComm):
+class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
     STB = {7: 'lamp_on',
            6: 'ext',
            5: 'power_mode',
@@ -77,9 +77,9 @@ class powarc(FSMDev, QThread, bufferedSocket.EthComm):
         :raise: Exception Config file badly formatted
         """
 
-        self.host = self.actor.config.get('powarc', 'host')
-        self.port = int(self.actor.config.get('powarc', 'port'))
-        self.mode = self.actor.config.get('powarc', 'mode') if mode is None else mode
+        self.host = self.actor.config.get('monoqth', 'host')
+        self.port = int(self.actor.config.get('monoqth', 'port'))
+        self.mode = self.actor.config.get('monoqth', 'mode') if mode is None else mode
 
     def startComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
@@ -88,11 +88,11 @@ class powarc(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        cmd.inform('powarcMode=%s' % self.mode)
-        self.sim = Powarcsim()
+        cmd.inform('monoqthMode=%s' % self.mode)
+        self.sim = Monoqthsim()
         s = self.connectSock()
 
-        cmd.inform('powarcVAW=%s,%s,%s' % self.checkVaw(cmd))
+        cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def switch(self, cmd, bool):
         cmdStr = 'START' if bool else 'STOP'
@@ -117,14 +117,14 @@ class powarc(FSMDev, QThread, bufferedSocket.EthComm):
         return voltage, current, power
 
     def getStatus(self, cmd):
-        cmd.inform('powarcFSM=%s,%s' % (self.states.current, self.substates.current))
-        cmd.inform('powarcMode=%s' % self.mode)
+        cmd.inform('monoqthFSM=%s,%s' % (self.states.current, self.substates.current))
+        cmd.inform('monoqthMode=%s' % self.mode)
 
         if self.states.current == 'ONLINE':
             stb = self.getStb(cmd=cmd)
             state = 'on' if getBit(stb, 7) else 'off'
-            cmd.inform('powarc=%s,%d,%d' % (state, stb, self.getEsr(cmd=cmd)))
-            cmd.inform('powarcVAW=%s,%s,%s' % self.checkVaw(cmd))
+            cmd.inform('monoqth=%s,%d,%d' % (state, stb, self.getEsr(cmd=cmd)))
+            cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
         cmd.finish()
 

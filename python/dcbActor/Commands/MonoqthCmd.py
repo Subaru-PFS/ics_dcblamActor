@@ -6,7 +6,7 @@ import opscore.protocols.types as types
 from enuActor.utils.wrap import threaded
 
 
-class PowarcCmd(object):
+class MonoqthCmd(object):
     def __init__(self, actor):
         # This lets us access the rest of the actor.
         self.actor = actor
@@ -16,7 +16,7 @@ class PowarcCmd(object):
         # associated methods when matched. The callbacks will be
         # passed a single argument, the parsed and typed command.
         #
-        self.name = "powarc"
+        self.name = "monoqth"
         self.vocab = [
             (self.name, 'status', self.status),
             (self.name, 'error', self.error),
@@ -25,7 +25,7 @@ class PowarcCmd(object):
         ]
 
         # Define typed command arguments for the above commands.
-        self.keys = keys.KeysDictionary("dcb__powarc", (1, 1),
+        self.keys = keys.KeysDictionary("dcb__monoqth", (1, 1),
                                         )
 
     @property

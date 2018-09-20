@@ -4,7 +4,7 @@ import logging
 import enuActor.Controllers.bufferedSocket as bufferedSocket
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
-from dcbActor.Controllers.simulator.monosim import Monosim
+from dcbActor.Controllers.simulator.mono import Monosim
 from opscore.utility.qstr import qstr
 
 
@@ -56,7 +56,7 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
 
         try:
-            self.actor.attachController(name='powarc')
+            self.actor.attachController(name='monoqth')
         except Exception as e:
             cmd.warn('text="%s' % self.actor.strTraceback(e))
 
@@ -64,7 +64,7 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         FSMDev.stop(self, cmd=cmd)
 
         try:
-            self.actor.detachController(controllerName='powarc')
+            self.actor.detachController(controllerName='monoqth')
         except Exception as e:
             cmd.warn('text="%s' % self.actor.strTraceback(e))
 
