@@ -90,8 +90,7 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         address = self.actor.config.get('address', channel)
 
         ret = self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=cmd)
-        self.checkChannel(cmd=cmd,
-                          channel=channel)
+        self.checkChannel(cmd=cmd, channel=channel)
 
     def checkChannel(self, cmd, channel):
 
@@ -115,15 +114,19 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
 
         if self.states.current == 'ONLINE':
 
-            for channel in channels:
-                self.checkChannel(cmd=cmd, channel=channel)
-            cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
+            try:
+                for channel in channels:
+                    self.checkChannel(cmd=cmd, channel=channel)
+                cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
 
-            v, a, w = self.checkVaw(cmd)
-            cmd.inform('atenVAW=%s,%s,%s' % (v, a, w))
+                v, a, w = self.checkVaw(cmd)
+                cmd.finish('atenVAW=%s,%s,%s' % (v, a, w))
 
-        self.closeSock()
-        cmd.finish()
+            except Exception as e:
+                raise e
+
+            finally:
+                self.closeSock()
 
     def checkVaw(self, cmd):
 
