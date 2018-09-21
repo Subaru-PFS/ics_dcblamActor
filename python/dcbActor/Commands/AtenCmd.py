@@ -19,13 +19,15 @@ class AtenCmd(object):
         self.name = "aten"
         self.vocab = [
             (self.name, 'status', self.status),
-            ('power', '@(on|off) @(<channel>|<channels>|labsphere)', self.switch),
+            ('power', '[<on>] [<off>]', self.switch),
         ]
 
         # Define typed command arguments for the above commands.
         self.keys = keys.KeysDictionary("dcb__aten", (1, 1),
-                                        keys.Key("channel", types.String(), help="which channel to power on"),
-                                        keys.Key("channels", types.String() * (1,), help="which channels to power on"),
+                                        keys.Key("on", types.String() * (1, None),
+                                                 help='which arc lamp to switch on.'),
+                                        keys.Key("off", types.String() * (1, None),
+                                                 help='which arc lamp to switch off.'),
                                         )
 
     @property
@@ -45,14 +47,8 @@ class AtenCmd(object):
     def switch(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
-        if 'labsphere' in cmdKeys:
-            channels = ["pow_attenuator", "pow_sphere", "pow_halogen"]
+        switchOn = cmdKeys['on'].values if 'on' in cmdKeys else []
+        switchOff = cmdKeys['off'].values if 'off' in cmdKeys else []
 
-        elif "channels" in cmdKeys:
-            channels = cmdKeys["channels"].values
-        else:
-            channels = [cmdKeys["channel"].values[0]]
-
-        bool = 'on' if "on" in cmdKeys else 'off'
-
-        self.controller.substates.switch(cmd=cmd, channels=channels, bool=bool)
+        self.controller.substates.switch(cmd=cmd, switchOn=switchOn, switchOff=switchOff)
+        cmd.finish()

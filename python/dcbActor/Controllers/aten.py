@@ -94,16 +94,27 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         s = self.connectSock()
 
     def switch(self, e):
+        toSwitch = dict([(channel, 'on') for channel in e.switchOn] + [(channel, 'off') for channel in e.switchOff])
+
+        labsphere = toSwitch.pop('labsphere', None)
+        if labsphere is not None:
+            toSwitch['pow_attenuator'] = labsphere
+            toSwitch['pow_sphere'] = labsphere
+            toSwitch['pow_halogen'] = labsphere
+
         try:
-            for channel in e.channels:
+            for channel, bool in toSwitch.items():
                 address = self.actor.config.get('address', channel)
-                ret = self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), e.bool), doClose=False, cmd=e.cmd)
+                ret = self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=e.cmd)
                 time.sleep(2)
                 e.cmd.inform('atenVAW=%s,%s,%s' % self.checkVaw(e.cmd))
                 self.checkChannel(cmd=e.cmd, channel=channel)
 
+            if labsphere is not None:
+                e.cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
+
             self.substates.idle(cmd=e.cmd)
-            e.cmd.finish('pow_labsphere=%s' % self.pow_labsphere)
+
         except:
             self.substates.fail(cmd=e.cmd)
             raise
