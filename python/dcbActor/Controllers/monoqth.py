@@ -1,4 +1,5 @@
 import logging
+import time
 
 import enuActor.Controllers.bufferedSocket as bufferedSocket
 from actorcore.FSM import FSMDev
@@ -37,9 +38,19 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
         :param actor: spsaitActor
         :param name: controller name
         """
+        substates = ['IDLE', 'TURNING_OFF', 'WARMING', 'FAILED']
+        events = [{'name': 'turnoff', 'src': 'IDLE', 'dst': 'TURNING_OFF'},
+                  {'name': 'turnon', 'src': 'IDLE', 'dst': 'WARMING'},
+                  {'name': 'idle', 'src': ['TURNINGOFF', 'WARMING'], 'dst': 'IDLE'},
+                  {'name': 'fail', 'src': ['TURNINGOFF', 'WARMING'], 'dst': 'FAILED'},
+                  ]
+
         bufferedSocket.EthComm.__init__(self)
         QThread.__init__(self, actor, name)
-        FSMDev.__init__(self, actor, name)
+        FSMDev.__init__(self, actor, name, events=events, substates=substates)
+
+        self.addStateCB('TURNING_OFF', self.turnOff)
+        self.addStateCB('WARMING', self.turnOn)
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
@@ -94,9 +105,31 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
 
         cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
-    def switch(self, cmd, bool):
+    def turnOn(self, e):
+        try:
+            self.turnQth(cmd=e.cmd, bool=True)
+            self.substates.idle(cmd=e.cmd)
+        except:
+            self.substates.fail(cmd=e.cmd)
+            raise
+
+    def turnOff(self, e):
+        try:
+            self.turnQth(cmd=e.cmd, bool=False)
+            self.substates.idle(cmd=e.cmd)
+        except:
+            self.substates.fail(cmd=e.cmd)
+            raise
+
+    def turnQth(self, cmd, bool):
         cmdStr = 'START' if bool else 'STOP'
         self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
+
+        stb = self.getStb(cmd=cmd)
+        while getBit(stb, 7) != bool:
+            time.sleep(1)
+            stb = self.getStb(cmd=cmd)
+            cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def getStb(self, cmd):
         stb = self.sendOneCommand('STB?', doClose=False, cmd=cmd)

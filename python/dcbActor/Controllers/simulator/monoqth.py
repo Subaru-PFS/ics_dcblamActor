@@ -1,5 +1,7 @@
+import random
 import socket
 import time
+from threading import Thread
 
 
 class Monoqthsim(socket.socket):
@@ -9,7 +11,8 @@ class Monoqthsim(socket.socket):
         self.recv = self.fakeRecv
 
         self.buf = []
-        self.lampOn = False
+        self.qthOn = False
+        self.power = 0
 
     def connect(self, server):
         (ip, port) = server
@@ -24,7 +27,7 @@ class Monoqthsim(socket.socket):
         cmdStr = cmdStr.decode()
 
         if cmdStr == 'STB?\r\n':
-            word = '21' if not self.lampOn else 'A1'
+            word = '21' if not self.qthOn else 'A1'
             self.buf.append('STB%s\r' % word)
 
         elif cmdStr == 'ESR?\r\n':
@@ -37,17 +40,30 @@ class Monoqthsim(socket.socket):
             self.buf.append('230.0\r')
 
         elif cmdStr == 'WATTS?\r\n':
-            self.buf.append('460.0\r')
+            power = self.power + random.gauss(mu=0, sigma=0.02)
+            self.buf.append('%.1f\r' % power)
 
         elif cmdStr == 'STOP\r\n':
-            self.lampOn = False
+            f1 = Thread(target=self.turnQth, args=(False,))
+            f1.start()
             self.buf.append('\r')
 
         elif cmdStr == 'START\r\n':
-            self.lampOn = True
+            f1 = Thread(target=self.turnQth, args=(True,))
+            f1.start()
             self.buf.append('\r')
         else:
             raise ValueError('unknown command')
+
+    def turnQth(self, bool, duration=10, tempo=0.05):
+        powFin = 40 if bool else 0
+        coeff = (powFin - self.power) / duration
+
+        while abs(self.power - powFin) > 0.05:
+            self.power += round(coeff * tempo, 3)
+            time.sleep(tempo)
+
+        self.qthOn = bool
 
     def fakeRecv(self, buffer_size):
         ret = self.buf[0]

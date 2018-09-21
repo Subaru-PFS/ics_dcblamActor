@@ -51,7 +51,10 @@ class MonoqthCmd(object):
     def switch(self, cmd):
         """Open/close , optional keyword force to force transition (without breaking interlock)"""
         cmdKeys = cmd.cmd.keywords
-        bool = True if 'on' in cmdKeys else False
 
-        self.controller.switch(cmd=cmd, bool=bool)
+        if 'on' in cmdKeys:
+            self.controller.substates.turnon(cmd=cmd)
+        else:
+            self.controller.substates.turnoff(cmd=cmd)
+
         self.controller.getStatus(cmd)
