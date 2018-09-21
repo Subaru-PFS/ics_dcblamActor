@@ -1,9 +1,8 @@
 import logging
 import time
-from functools import partial
+
 from actorcore.FSM import FSMDev
 from actorcore.QThread import QThread
-from twisted.internet import reactor
 
 
 class arc(FSMDev, QThread):
@@ -55,41 +54,41 @@ class arc(FSMDev, QThread):
         self.actor.callCommand('monitor controllers=labsphere period=5')
 
         try:
-            nextState = self.state
-            toSwitch = [(arc, True) for arc in e.switchOn] + [(arc, False) for arc in e.switchOff]
+            cmdSwitch = [(arc, True) for arc in e.switchOn] + [(arc, False) for arc in e.switchOff]
+            effectiveSwitch = dict([(arc, bool) for arc, bool in cmdSwitch if self.state[arc] != bool])
 
-            for arc, bool in toSwitch:
-                if arc not in nextState.keys():
-                    raise KeyError('unknown arc lamp')
-                nextState[arc] = bool
+            if not effectiveSwitch:
+                force = True
+            else:
+                halogen = effectiveSwitch.pop('halogen', None)
+                if halogen is not None:
+                    state = 'on' if halogen else 'off'
+                    self.controllers["labsphere"].substates.halogen(cmd=e.cmd, state=state)
 
-            if self.state != nextState:
+                switchOn = [arc for arc, bool in effectiveSwitch.items() if bool]
+                switchOff = [arc for arc, bool in effectiveSwitch.items() if not bool]
 
-                for arc, bool in toSwitch:
-                    if arc in ['neon', 'hgar', 'xenon', 'krypton']:
-                        self.controllers["aten"].switch(cmd=e.cmd, channel=arc, bool=bool)
-                    else:
-                        self.controllers["labsphere"].substates.halogen(cmd=e.cmd, bool=bool)
+                self.controllers["aten"].substates.switch(cmd=e.cmd, switchOn=switchOn, switchOff=switchOff)
 
-                if not force:
-                    self.flux.clear()
-                    while not self.flux.isCompleted:
-                        time.sleep(1)
+            if not force:
+                self.flux.clear()
+                while not self.flux.isCompleted:
+                    time.sleep(1)
 
-                    start = time.time()
-                    while not (self.flux.mean > 0.001) and (self.flux.std < 0.05):
-                        time.sleep(1)
-                        if (time.time() - start) > 300:
-                            raise TimeoutError('Photodiode flux is null or unstable')
+                start = time.time()
+                while not (self.flux.mean > 0.001) and (self.flux.std < 0.05):
+                    time.sleep(1)
+                    if (time.time() - start) > 120:
+                        raise TimeoutError('Photodiode flux is null or unstable')
 
             self.substates.idle(cmd=e.cmd)
+
         except:
             self.substates.fail(cmd=e.cmd)
             raise
+
         finally:
             self.actor.callCommand('monitor controllers=labsphere period=15')
-
-
 
     def handleTimeout(self):
         if self.exitASAP:
