@@ -15,9 +15,17 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         :param actor: spsaitActor
         :param name: controller name
         """
+        substates = ['IDLE', 'SWITCHING', 'FAILED']
+        events = [{'name': 'switch', 'src': 'IDLE', 'dst': 'SWITCHING'},
+                  {'name': 'idle', 'src': ['SWITCHING', ], 'dst': 'IDLE'},
+                  {'name': 'fail', 'src': ['SWITCHING', ], 'dst': 'FAILED'},
+                  ]
+
         bufferedSocket.EthComm.__init__(self)
         QThread.__init__(self, actor, name)
-        FSMDev.__init__(self, actor, name)
+        FSMDev.__init__(self, actor, name, events=events, substates=substates)
+
+        self.addStateCB('SWITCHING', self.switch)
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
@@ -85,12 +93,20 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         self.sim = Atensim()
         s = self.connectSock()
 
-    def switch(self, cmd, channel, bool):
-        bool = 'on' if bool else 'off'
-        address = self.actor.config.get('address', channel)
+    def switch(self, e):
+        try:
+            for channel in e.channels:
+                address = self.actor.config.get('address', channel)
+                ret = self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), e.bool), doClose=False, cmd=e.cmd)
+                time.sleep(2)
+                e.cmd.inform('atenVAW=%s,%s,%s' % self.checkVaw(e.cmd))
+                self.checkChannel(cmd=e.cmd, channel=channel)
 
-        ret = self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=cmd)
-        self.checkChannel(cmd=cmd, channel=channel)
+            self.substates.idle(cmd=e.cmd)
+            e.cmd.finish('pow_labsphere=%s' % self.pow_labsphere)
+        except:
+            self.substates.fail(cmd=e.cmd)
+            raise
 
     def checkChannel(self, cmd, channel):
 
@@ -102,8 +118,8 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
             time.sleep(1)
             return self.checkChannel(cmd, channel)
         else:
-            state = 'on' if ' on' in ret.split('\r\n')[1] else 'off'
-            self.state[channel] = True if state == 'on' else False
+            self.state[channel] = True if ' on' in ret.split('\r\n')[1] else False
+            state = 'on' if self.state[channel] else 'off'
             cmd.inform('%s=%s' % (channel, state))
 
     def getStatus(self, cmd):
@@ -118,12 +134,10 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
                 for channel in channels:
                     self.checkChannel(cmd=cmd, channel=channel)
                 cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
+                cmd.finish('atenVAW=%s,%s,%s' % self.checkVaw(cmd))
 
-                v, a, w = self.checkVaw(cmd)
-                cmd.finish('atenVAW=%s,%s,%s' % (v, a, w))
-
-            except Exception as e:
-                raise e
+            except:
+                raise
 
             finally:
                 self.closeSock()

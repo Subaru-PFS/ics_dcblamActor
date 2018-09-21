@@ -53,9 +53,6 @@ class AtenCmd(object):
         else:
             channels = [cmdKeys["channel"].values[0]]
 
-        bool = True if "on" in cmdKeys else False
+        bool = 'on' if "on" in cmdKeys else 'off'
 
-        for channel in channels:
-            self.controller.switch(cmd, channel, bool)
-
-        self.controller.getStatus(cmd)
+        self.controller.substates.switch(cmd=cmd, channels=channels, bool=bool)
