@@ -9,6 +9,8 @@ class Monosim(socket.socket):
                   1: 'System error (miscellaneous)',
                   2: 'Bad parameter used in Command',
                   3: 'Destination position for wavelength motion not allowed',
+                  4: 'OK',
+                  5: 'OK',
                   6: 'Accessory not present (usually filter wheel)',
                   7: 'Accessory already in specified position',
                   8: 'Could not home wavelength drive',

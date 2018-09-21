@@ -41,8 +41,8 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
         substates = ['IDLE', 'TURNING_OFF', 'WARMING', 'FAILED']
         events = [{'name': 'turnoff', 'src': 'IDLE', 'dst': 'TURNING_OFF'},
                   {'name': 'turnon', 'src': 'IDLE', 'dst': 'WARMING'},
-                  {'name': 'idle', 'src': ['TURNINGOFF', 'WARMING'], 'dst': 'IDLE'},
-                  {'name': 'fail', 'src': ['TURNINGOFF', 'WARMING'], 'dst': 'FAILED'},
+                  {'name': 'idle', 'src': ['TURNING_OFF', 'WARMING'], 'dst': 'IDLE'},
+                  {'name': 'fail', 'src': ['TURNING_OFF', 'WARMING'], 'dst': 'FAILED'},
                   ]
 
         bufferedSocket.EthComm.__init__(self)
