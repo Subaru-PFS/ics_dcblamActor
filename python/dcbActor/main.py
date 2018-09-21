@@ -41,13 +41,15 @@ class OurActor(actorcore.ICC.ICC):
     @property
     def substate(self):
 
-        if self.controllers.values():
-            if False in [controller.substates.current == 'IDLE' for controller in self.controllers.values()]:
-                substate = self.onsubstate
-            else:
-                substate = 'IDLE'
-        else:
+        substates = [controller.substates.current for controller in self.controllers.values()]
+        isNotIdle = [substate != 'IDLE' for substate in substates]
+
+        if sum(isNotIdle) == 0:
             substate = 'IDLE'
+        elif sum(isNotIdle) == 1:
+            substate = substates[int(np.argmax(isNotIdle))]
+        else:
+            substate = 'BUSY'
 
         return substate
 
@@ -87,8 +89,6 @@ class OurActor(actorcore.ICC.ICC):
             cmd.warn('text="adjusted %s loop to %gs"' % (controller, self.monitors[controller]))
 
     def updateStates(self, cmd, onsubstate=False):
-        self.onsubstate = onsubstate if onsubstate and onsubstate != 'IDLE' else self.onsubstate
-
         cmd.inform('metaFSM=%s,%s' % (self.state, self.substate))
 
 
