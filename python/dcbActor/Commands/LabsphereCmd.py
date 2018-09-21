@@ -20,7 +20,7 @@ class LabsphereCmd(object):
         self.vocab = [
             (self.name, 'status', self.status),
             (self.name, '<attenuator>', self.moveAttenuator),
-            (self.name, '@(switch) @(on|off)', self.switchHalogen),
+            (self.name, '@(halogen) @(on|off)', self.switchHalogen),
             (self.name, 'init', self.initialise),
 
         ]

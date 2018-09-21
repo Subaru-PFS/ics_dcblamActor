@@ -15,14 +15,15 @@ def attenuator(value):
 
 
 def turnQth(state):
-    if state == 'on':
+    if state in [True, 'on']:
         cmdStr = 'P3J1X'
-    elif state == 'off':
+    elif state in [False, 'off']:
         cmdStr = 'P3K1X'
     else:
         raise ValueError('%s does not exist' % state)
 
     return cmdStr
+
 
 def photodiode():
     return 'O0X'

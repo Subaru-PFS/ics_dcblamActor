@@ -96,6 +96,14 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
     def halogenOn(self):
         return self.halogen == 'on'
 
+    def persistHalogen(self, cmd, state):
+        self.halogen = state
+        cmd.inform('halogen=%s' % state)
+
+    def persistAttenuator(self, cmd, value):
+        self.attenuator = value
+        cmd.inform('attenuator=%i' % value)
+
     def start(self, cmd=None, doInit=False, mode=None):
         QThread.start(self)
         FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
@@ -137,8 +145,10 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         """
         cmd.inform('labsMode=%s' % self.mode)
         self.sim = Labspheresim(self.actor)
-        s = self.connectSock()
+
         flux = self.photodiode(cmd=cmd)
+        self.persistHalogen(cmd=cmd, state='undef')
+        self.persistAttenuator(cmd=cmd, value=-1)
 
     def init(self, cmd):
         """| Initialise the interlock board, called y device.initDevice().
@@ -155,35 +165,34 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
 
         self.sendOneCommand(labsDrivers.turnQth(state='off'), doClose=False, cmd=cmd)
 
-        self.attenuator = 255
-        self.halogen = 'off'
+        self.persistHalogen(cmd=cmd, state='off')
+        self.persistAttenuator(cmd=cmd, value=255)
 
     def moveAttenuator(self, e):
 
         try:
             for cmdStr in labsDrivers.attenuator(e.value):
                 self.sendOneCommand(cmdStr, cmd=e.cmd)
-
-            self.attenuator = e.value
-            self.substates.idle(cmd=e.cmd)
-
         except:
-
+            self.persistAttenuator(cmd=e.cmd, value=-1)
             self.substates.fail(cmd=e.cmd)
-            self.attenuator = -1
+
             raise
+
+        self.persistAttenuator(cmd=e.cmd, value=e.value)
+        self.substates.idle(cmd=e.cmd)
 
     def switchHalogen(self, e):
+
         try:
             self.sendOneCommand(labsDrivers.turnQth(state=e.state), cmd=e.cmd)
-            state = 'on' if e.bool else 'off'
-            self.halogen = state
-            self.substates.idle(cmd=e.cmd)
-            e.cmd.inform('halogen=%s' % self.halogen)
         except:
-            self.halogen = 'undef'
+            self.persistHalogen(cmd=e.cmd, state='undef')
             self.substates.fail(cmd=e.cmd)
             raise
+
+        self.persistHalogen(cmd=e.cmd, state=e.state)
+        self.substates.idle(cmd=e.cmd)
 
     def getStatus(self, cmd):
         cmd.inform('labsphereFSM=%s,%s' % (self.states.current, self.substates.current))
@@ -200,8 +209,6 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
                 raise
 
             finally:
-                cmd.inform('attenuator=%i' % self.attenuator)
-                cmd.inform('halogen=%s' % self.halogen)
                 cmd.inform('fluxmedian=%.3f' % self.smoothFlux.median)
                 cmd.inform('photodiode=%.3f' % self.flux)
 
