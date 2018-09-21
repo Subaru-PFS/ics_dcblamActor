@@ -30,9 +30,8 @@ class SmoothFlux(list):
         return np.std(self.values)
 
     @property
-    def isWarmedUp(self):
-        ret = True if len(self) > 8 else False
-        return ret
+    def isCompleted(self):
+        return len(self) > 8
 
     def append(self, object):
         list.append(self, object)

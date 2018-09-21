@@ -40,7 +40,7 @@ class arc(FSMDev, QThread):
 
     @property
     def flux(self):
-        return self.controllers["labsphere"].flux
+        return self.controllers["labsphere"].smoothFlux
 
     def start(self, cmd=None, doInit=True, mode=None):
         QThread.start(self)
@@ -52,7 +52,7 @@ class arc(FSMDev, QThread):
 
     def switchArc(self, e):
         force = True if not e.switchOn else e.force
-        reactor.callLater(1, partial(self.setSampling, 5))
+        self.actor.callCommand('monitor controllers=labsphere period=5')
 
         try:
             nextState = self.state
@@ -73,21 +73,21 @@ class arc(FSMDev, QThread):
 
                 if not force:
                     self.flux.clear()
-                    while not self.flux.isWarmedUp:
-                        time.sleep(5)
+                    while not self.flux.isCompleted:
+                        time.sleep(1)
 
                     start = time.time()
                     while not (self.flux.mean > 0.001) and (self.flux.std < 0.05):
-                        time.sleep(5)
+                        time.sleep(1)
                         if (time.time() - start) > 300:
-                            raise Exception('Timeout photodiode flux is null or unstable')
+                            raise TimeoutError('Photodiode flux is null or unstable')
 
             self.substates.idle(cmd=e.cmd)
         except:
             self.substates.fail(cmd=e.cmd)
             raise
         finally:
-            reactor.callLater(1, partial(self.setSampling, 15))
+            self.actor.callCommand('monitor controllers=labsphere period=15')
 
 
 
