@@ -100,6 +100,7 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
         :raise: Exception if the communication has failed with the controller
         """
         cmd.inform('monoqthMode=%s' % self.mode)
+
         self.sim = Monoqthsim()
         s = self.connectSock()
 
@@ -150,8 +151,8 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
         return voltage, current, power
 
     def getStatus(self, cmd):
-        cmd.inform('monoqthFSM=%s,%s' % (self.states.current, self.substates.current))
         cmd.inform('monoqthMode=%s' % self.mode)
+        cmd.inform('monoqthFSM=%s,%s' % (self.states.current, self.substates.current))
 
         if self.states.current == 'ONLINE':
             stb = self.getStb(cmd=cmd)
@@ -182,7 +183,7 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
         return s
 
     def sendOneCommand(self, *args, **kwargs):
-        if not self.actor.controllers['aten'].pow_mono:
+        if not self.actor.controllers['aten'].pow_mono == 'on':
             raise UserWarning('monochromator is not powered on')
 
         return bufferedSocket.EthComm.sendOneCommand(self, *args, **kwargs)

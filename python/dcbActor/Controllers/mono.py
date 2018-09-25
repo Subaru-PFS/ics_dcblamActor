@@ -91,15 +91,16 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         :raise: Exception if the communication has failed with the controller
         """
         cmd.inform('monoMode=%s' % self.mode)
+
         self.sim = Monosim()
         s = self.connectSock()
 
-        controllerStatus = self.sendOneCommand('status', doClose=True, cmd=cmd)
-        cmd.inform('text=%s' % qstr(controllerStatus))
+        status = self.sendOneCommand('status', doClose=True, cmd=cmd)
+        cmd.inform('text=%s' % qstr(status))
 
     def getStatus(self, cmd):
-        cmd.inform('monoFSM=%s,%s' % (self.states.current, self.substates.current))
         cmd.inform('monoMode=%s' % self.mode)
+        cmd.inform('monoFSM=%s,%s' % (self.states.current, self.substates.current))
 
         if self.states.current == 'ONLINE':
             error = self.getError(cmd=cmd)
@@ -162,7 +163,7 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         self.sendOneCommand('setwave,%.3f' % wavelength, doClose=doClose, cmd=cmd)
 
     def sendOneCommand(self, cmdStr, doClose=True, cmd=None):
-        if not self.actor.controllers['aten'].pow_mono:
+        if not self.actor.controllers['aten'].pow_mono == 'on':
             raise UserWarning('monochromator is not powered on')
 
         reply = bufferedSocket.EthComm.sendOneCommand(self, cmdStr=cmdStr, doClose=doClose, cmd=cmd)
