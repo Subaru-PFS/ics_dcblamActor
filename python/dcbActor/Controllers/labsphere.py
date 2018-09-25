@@ -9,13 +9,20 @@ from actorcore.QThread import QThread
 from dcbActor.Controllers.simulator.labsphere import Labspheresim
 
 
-class SmoothFlux(list):
+class SmoothFlux(object):
     def __init__(self):
-        list.__init__(self)
+        object.__init__(self)
+        self.current = []
+
+    @property
+    def last(self):
+        return self.values[-1] if self.values.size else np.nan
 
     @property
     def values(self):
-        return np.array([val for date, val in self])
+        values = np.array([val for time, val in self.current])
+
+        return values[~np.isnan(values)]
 
     @property
     def median(self):
@@ -31,20 +38,17 @@ class SmoothFlux(list):
 
     @property
     def isCompleted(self):
-        return len(self) > 8
+        return len(self.values) > 6
 
-    def append(self, object):
-        list.append(self, object)
+    def newFlux(self, value):
+        self.current.append((time.time(), value))
         self.smoothOut()
 
     def smoothOut(self, outdated=60):
-        i = 0
-        while i < len(self):
-            if (time.time() - self[i][0]) > outdated:
-                self.remove((self[i]))
-            else:
-                i += 1
+        self.current = [(tstamp, val) for tstamp, val in self.current if (time.time() - tstamp) < outdated]
 
+    def clear(self):
+        self.current.clear()
 
 class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
     def __init__(self, actor, name, loglevel=logging.DEBUG):
@@ -91,10 +95,6 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
             return False
         else:
             raise ValueError('unknown mode')
-
-    @property
-    def halogenOn(self):
-        return self.halogen == 'on'
 
     def persistHalogen(self, cmd, state):
         self.halogen = state
@@ -143,7 +143,8 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        cmd.inform('labsMode=%s' % self.mode)
+        cmd.inform('labsphereMode=%s' % self.mode)
+
         self.sim = Labspheresim(self.actor)
 
         flux = self.photodiode(cmd=cmd)
@@ -195,32 +196,26 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.substates.idle(cmd=e.cmd)
 
     def getStatus(self, cmd):
-        cmd.inform('labsphereFSM=%s,%s' % (self.states.current, self.substates.current))
         cmd.inform('labsphereMode=%s' % self.mode)
+        cmd.inform('labsphereFSM=%s,%s' % (self.states.current, self.substates.current))
 
         if self.states.current in ['LOADED', 'ONLINE']:
 
             try:
-                self.flux = self.photodiode(cmd=cmd)
-
+                flux = self.photodiode(cmd=cmd)
             except:
-                self.flux = np.nan
-                self.smoothFlux.clear()
+                flux = np.nan
                 raise
-
             finally:
+                self.smoothFlux.newFlux(flux)
                 cmd.inform('fluxmedian=%.3f' % self.smoothFlux.median)
-                cmd.inform('photodiode=%.3f' % self.flux)
+                cmd.inform('photodiode=%.3f' % self.smoothFlux.last)
 
         cmd.finish()
 
     def photodiode(self, cmd):
         footLamberts = self.sendOneCommand(labsDrivers.photodiode(), cmd=cmd)
-        flux = np.round(float(footLamberts) * 3.426, 3)
-
-        self.smoothFlux.append((time.time(), flux))
-
-        return flux
+        return np.round(float(footLamberts) * 3.42626, 3)
 
     def createSock(self):
         if self.simulated:

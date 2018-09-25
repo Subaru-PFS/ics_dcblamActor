@@ -28,7 +28,7 @@ class Labspheresim(socket.socket):
         if cmdStr == 'O0X':
             noise = random.gauss(mu=0, sigma=0.02)
             try:
-                offset = 3.2 if True in self.actor.controllers['arc'].state.values() else 0
+                offset = 3.2 if 'on' in self.actor.controllers['arc'].state.values() else 0
             except KeyError:
                 offset = 0
 
