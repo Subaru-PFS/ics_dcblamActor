@@ -35,7 +35,7 @@ class arc(FSMDev, QThread):
                 "hgar": self.controllers["aten"].state["hgar"],
                 "xenon": self.controllers["aten"].state["xenon"],
                 "krypton": self.controllers["aten"].state["krypton"],
-                "halogen": self.controllers["labsphere"].halogenOn}
+                "halogen": self.controllers["labsphere"].halogen}
 
     @property
     def flux(self):
@@ -51,34 +51,36 @@ class arc(FSMDev, QThread):
 
     def switchArc(self, e):
         force = True if not e.switchOn else e.force
-        self.actor.callCommand('monitor controllers=labsphere period=5')
+        self.actor.callCommand('monitor controllers=labsphere period=3')
 
         try:
-            cmdSwitch = [(arc, True) for arc in e.switchOn] + [(arc, False) for arc in e.switchOff]
-            effectiveSwitch = dict([(arc, bool) for arc, bool in cmdSwitch if self.state[arc] != bool])
+            cmdSwitch = [(arc, 'on') for arc in e.switchOn] + [(arc, 'off') for arc in e.switchOff]
+            effectiveSwitch = dict([(arc, state) for arc, state in cmdSwitch if self.state[arc] != state])
 
             if not effectiveSwitch:
                 force = True
             else:
                 halogen = effectiveSwitch.pop('halogen', None)
                 if halogen is not None:
-                    state = 'on' if halogen else 'off'
-                    self.controllers["labsphere"].substates.halogen(cmd=e.cmd, state=state)
+                    self.actor.callCommand('labsphere halogen %s' % halogen)
 
-                switchOn = [arc for arc, bool in effectiveSwitch.items() if bool]
-                switchOff = [arc for arc, bool in effectiveSwitch.items() if not bool]
+                switchOn = [arc for arc, state in effectiveSwitch.items() if state == 'on']
+                switchOff = [arc for arc, state in effectiveSwitch.items() if state == 'off']
 
-                self.controllers["aten"].substates.switch(cmd=e.cmd, switchOn=switchOn, switchOff=switchOff)
+                if switchOn or switchOff:
+                    self.actor.callCommand('power %s %s' % ('on=%s' % ','.join(switchOn) if switchOn else '',
+                                                            'off=%s' % ','.join(switchOff) if switchOff else ''))
 
             if not force:
                 self.flux.clear()
+
                 while not self.flux.isCompleted:
                     time.sleep(1)
 
                 start = time.time()
-                while not (self.flux.mean > 0.001) and (self.flux.std < 0.05):
+                while not (self.flux.mean > 0.01) and (self.flux.std < 0.1):
                     time.sleep(1)
-                    if (time.time() - start) > 120:
+                    if (time.time() - start) > 150:
                         raise TimeoutError('Photodiode flux is null or unstable')
 
             self.substates.idle(cmd=e.cmd)
