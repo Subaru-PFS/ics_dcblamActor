@@ -40,16 +40,16 @@ class Atensim(socket.socket):
 
         elif 'read status' in cmdStr:
             __, __, nb, __ = cmdStr.split(' ')
-            self.buf.append('%s Outlet %s %s\r\n\r\n> ' % (cmdStr, nb, self.channels[nb]))
+            self.buf.append('%s Outlet %s %s\r\n> ' % (cmdStr, nb[1:], self.channels[nb]))
 
         elif 'read meter dev' in cmdStr:
             __, __, __, val, __ = cmdStr.split(' ')
-            self.buf.append('%s %s\r\n\r\n> '%(cmdStr, self.vals[val]))
+            self.buf.append('%s %s\r\n\r\n> ' % (cmdStr, self.vals[val]))
 
         elif 'sw o' in cmdStr:
             __, nb, state, __ = cmdStr.split(' ')
             self.channels[nb] = state
-            self.buf.append('ok\r\n>')
+            self.buf.append('%s  Outlet<%s> command is setting\r\n>' % (cmdStr, nb))
 
     def fakeRecv(self, buffer_size):
         ret = self.buf[0]

@@ -51,4 +51,4 @@ class AtenCmd(object):
         switchOff = cmdKeys['off'].values if 'off' in cmdKeys else []
 
         self.controller.substates.switch(cmd=cmd, switchOn=switchOn, switchOff=switchOff)
-        cmd.finish()
+        self.controller.getStatus(cmd)

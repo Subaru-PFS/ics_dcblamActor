@@ -49,7 +49,7 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
 
     @property
     def pow_labsphere(self):
-        logsum = sum([1 if self.state[key] else 0 for key in ['pow_attenuator', 'pow_sphere', 'pow_halogen']])
+        logsum = sum([1 if self.state[key] == 'on' else 0 for key in ['pow_attenuator', 'pow_sphere', 'pow_halogen']])
         if logsum == 3:
             return 'on'
         elif logsum == 0:
@@ -60,6 +60,12 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
     @property
     def pow_mono(self):
         return self.state['pow_mono']
+
+    def getChannel(self, outlet):
+        return {'Outlet %s' % (v.strip()).zfill(2): k for k, v in self.actor.config.items('outlets')}[outlet]
+
+    def getOutlet(self, channel):
+        return self.actor.config.get('outlets', channel).strip().zfill(2)
 
     def start(self, cmd=None, doInit=True, mode=None):
         QThread.start(self)
@@ -77,7 +83,6 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         :type mode: str
         :raise: Exception Config file badly formatted
         """
-
         self.host = self.actor.config.get('aten', 'host')
         self.port = int(self.actor.config.get('aten', 'port'))
         self.mode = self.actor.config.get('aten', 'mode') if mode is None else mode
@@ -90,6 +95,7 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         :raise: Exception if the communication has failed with the controller
         """
         cmd.inform('atenMode=%s' % self.mode)
+
         self.sim = Atensim()
         s = self.connectSock()
 
@@ -103,15 +109,11 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
             toSwitch['pow_halogen'] = labsphere
 
         try:
-            for channel, bool in toSwitch.items():
-                address = self.actor.config.get('address', channel)
-                ret = self.sendOneCommand("sw o%s %s imme" % (address.zfill(2), bool), doClose=False, cmd=e.cmd)
-                time.sleep(2)
-                e.cmd.inform('atenVAW=%s,%s,%s' % self.checkVaw(e.cmd))
+            for channel, state in toSwitch.items():
+                cmdStr = "sw o%s %s imme" % (self.getOutlet(channel=channel), state)
+                ret = self.sendOneCommand(cmdStr=cmdStr, cmd=e.cmd)
                 self.checkChannel(cmd=e.cmd, channel=channel)
-
-            if labsphere is not None:
-                e.cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
+                time.sleep(2)
 
             self.substates.idle(cmd=e.cmd)
 
@@ -121,29 +123,25 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
 
     def checkChannel(self, cmd, channel):
 
-        address = self.actor.config.get('address', channel)
+        outlet = self.getOutlet(channel=channel)
 
-        ret = self.sendOneCommand('read status o%s format' % address.zfill(2), doClose=False, cmd=cmd)
+        ret = self.sendOneCommand('read status o%s format' % outlet, cmd=cmd)
+        outlet, state = ret.rsplit(' ', 1)
 
-        if 'pending' in ret:
-            time.sleep(1)
-            return self.checkChannel(cmd, channel)
-        else:
-            self.state[channel] = True if ' on' in ret.split('\r\n')[1] else False
-            state = 'on' if self.state[channel] else 'off'
-            cmd.inform('%s=%s' % (channel, state))
+        self.setState(cmd=cmd, channel=self.getChannel(outlet=outlet), state=state)
 
     def getStatus(self, cmd):
-        cmd.inform('atenFSM=%s,%s' % (self.states.current, self.substates.current))
         cmd.inform('atenMode=%s' % self.mode)
+        cmd.inform('atenFSM=%s,%s' % (self.states.current, self.substates.current))
 
-        channels = [channel for channel in self.actor.config.options('address')]
+        channels = [channel for channel in self.actor.config.options('outlets')]
 
         if self.states.current == 'ONLINE':
 
             try:
                 for channel in channels:
                     self.checkChannel(cmd=cmd, channel=channel)
+
                 cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
                 cmd.finish('atenVAW=%s,%s,%s' % self.checkVaw(cmd))
 
@@ -155,15 +153,16 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
 
     def checkVaw(self, cmd):
 
-        voltage = self.sendOneCommand('read meter dev volt simple', doClose=False, cmd=cmd)
-        current = self.sendOneCommand('read meter dev curr simple', doClose=False, cmd=cmd)
-        power = self.sendOneCommand('read meter dev pow simple', doClose=False, cmd=cmd)
+        voltage = self.sendOneCommand('read meter dev volt simple', cmd=cmd)
+        current = self.sendOneCommand('read meter dev curr simple', cmd=cmd)
+        power = self.sendOneCommand('read meter dev pow simple', cmd=cmd)
 
-        v = voltage.split('\r\n')[1].strip()
-        a = current.split('\r\n')[1].strip()
-        w = power.split('\r\n')[1].strip()
+        return voltage, current, power
 
-        return v, a, w
+    def setState(self, cmd, channel, state):
+
+        self.state[channel] = state
+        cmd.inform('%s=%s' % (channel, state))
 
     def connectSock(self):
         """ Connect socket if self.sock is None
@@ -188,6 +187,14 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
             s = bufferedSocket.EthComm.createSock(self)
 
         return s
+
+    def sendOneCommand(self, cmdStr, doClose=False, cmd=None):
+        fullCmd = '%s%s' % (cmdStr, self.EOL)
+        reply = bufferedSocket.EthComm.sendOneCommand(self, cmdStr=cmdStr, doClose=doClose, cmd=cmd)
+        if fullCmd not in reply:
+            raise ValueError('Command was not echoed properly')
+
+        return reply.split(fullCmd)[1].strip()
 
     def authenticate(self, sock):
         time.sleep(0.1)
