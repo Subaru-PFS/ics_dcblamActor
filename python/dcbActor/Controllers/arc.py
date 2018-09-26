@@ -75,11 +75,11 @@ class arc(FSMDev, QThread):
                 self.flux.clear()
 
                 while not self.flux.isCompleted:
-                    time.sleep(1)
+                    time.sleep(0.1)
 
                 start = time.time()
-                while not (self.flux.mean > 0.01) and (self.flux.std < 0.1):
-                    time.sleep(1)
+                while not (self.flux.median > 0.01) and (self.flux.std < 0.5):
+                    time.sleep(0.1)
                     if (time.time() - start) > 150:
                         raise TimeoutError('Photodiode flux is null or unstable')
 

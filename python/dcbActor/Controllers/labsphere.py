@@ -44,7 +44,7 @@ class SmoothFlux(object):
         self.current.append((time.time(), value))
         self.smoothOut()
 
-    def smoothOut(self, outdated=60):
+    def smoothOut(self, outdated=30):
         self.current = [(tstamp, val) for tstamp, val in self.current if (time.time() - tstamp) < outdated]
 
     def clear(self):
@@ -208,7 +208,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
                 raise
             finally:
                 self.smoothFlux.newFlux(flux)
-                cmd.inform('fluxmedian=%.3f' % self.smoothFlux.median)
+                cmd.inform('flux=%.3f,%.3f' % (self.smoothFlux.median, self.smoothFlux.std))
                 cmd.inform('photodiode=%.3f' % self.smoothFlux.last)
 
         cmd.finish()
