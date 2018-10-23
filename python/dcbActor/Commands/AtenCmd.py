@@ -51,6 +51,8 @@ class AtenCmd(object):
         switchOff = cmdKeys['off'].values if 'off' in cmdKeys else []
 
         for channel in switchOn + switchOff:
+            if channel == 'labsphere':
+                continue
             self.controller.getOutlet(channel=channel)
 
         self.controller.substates.switch(cmd=cmd, switchOn=switchOn, switchOff=switchOff)
