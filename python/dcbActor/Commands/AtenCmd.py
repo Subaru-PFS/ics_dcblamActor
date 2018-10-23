@@ -50,5 +50,8 @@ class AtenCmd(object):
         switchOn = cmdKeys['on'].values if 'on' in cmdKeys else []
         switchOff = cmdKeys['off'].values if 'off' in cmdKeys else []
 
+        for channel in switchOn + switchOff:
+            self.controller.getOutlet(channel=channel)
+
         self.controller.substates.switch(cmd=cmd, switchOn=switchOn, switchOff=switchOff)
         self.controller.getStatus(cmd)
