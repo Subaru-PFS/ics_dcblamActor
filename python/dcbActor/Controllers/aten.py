@@ -111,7 +111,7 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         try:
             for channel, state in toSwitch.items():
                 cmdStr = "sw o%s %s imme" % (self.getOutlet(channel=channel), state)
-                ret = self.sendOneCommand(cmdStr=cmdStr, cmd=e.cmd)
+                ret = self.sendOneCommand(cmdStr=cmdStr, cmd=e.cmd, doRaise=False)
                 self.checkChannel(cmd=e.cmd, channel=channel)
                 time.sleep(2)
 
@@ -120,6 +120,9 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         except:
             self.substates.fail(cmd=e.cmd)
             raise
+
+        finally:
+            self.closeSock()
 
     def checkChannel(self, cmd, channel):
 
@@ -176,7 +179,11 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
             s.settimeout(2.0)
             s.connect((self.host, self.port))
 
-            self.sock = self.authenticate(sock=s)
+            try:
+                self.sock = self.authenticate(sock=s)
+            except ValueError:
+                self.closeSock()
+                return self.connectSock()
 
         return self.sock
 
@@ -188,13 +195,25 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
 
         return s
 
-    def sendOneCommand(self, cmdStr, doClose=False, cmd=None):
+    def sendOneCommand(self, cmdStr, doClose=False, cmd=None, doRaise=True):
         fullCmd = '%s%s' % (cmdStr, self.EOL)
         reply = bufferedSocket.EthComm.sendOneCommand(self, cmdStr=cmdStr, doClose=doClose, cmd=cmd)
-        if fullCmd not in reply:
+
+        return self.parseResponse(cmd=cmd, fullCmd=fullCmd, reply=reply, doRaise=doRaise)
+
+    def parseResponse(self, cmd, fullCmd, reply, doRaise, retry=True):
+        if fullCmd in reply:
+            return reply.split(fullCmd)[1].strip()
+
+        if retry:
+            time.sleep(1)
+            reply = self.getOneResponse(cmd=cmd)
+            return self.parseResponse(cmd=cmd, fullCmd=fullCmd, reply=reply, doRaise=doRaise, retry=False)
+
+        if doRaise:
             raise ValueError('Command was not echoed properly')
 
-        return reply.split(fullCmd)[1].strip()
+        return
 
     def authenticate(self, sock):
         time.sleep(0.1)

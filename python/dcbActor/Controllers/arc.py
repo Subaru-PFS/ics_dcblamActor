@@ -70,7 +70,6 @@ class arc(FSMDev, QThread):
                 if switchOn or switchOff:
                     self.actor.callCommand('power %s %s' % ('on=%s' % ','.join(switchOn) if switchOn else '',
                                                             'off=%s' % ','.join(switchOff) if switchOff else ''))
-
             if not force:
                 self.flux.clear()
 
@@ -78,9 +77,9 @@ class arc(FSMDev, QThread):
                     time.sleep(0.1)
 
                 start = time.time()
-                while not (self.flux.median > 0.01) and (self.flux.std < 0.5):
+                while not (self.flux.median > 0.01 and self.flux.std < 0.1):
                     time.sleep(0.1)
-                    if (time.time() - start) > 150:
+                    if (time.time() - start) > 300:
                         raise TimeoutError('Photodiode flux is null or unstable')
 
             self.substates.idle(cmd=e.cmd)
