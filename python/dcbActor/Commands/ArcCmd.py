@@ -60,6 +60,9 @@ class ArcCmd(object):
         force = True if 'force' in cmdKeys else False
         attenuator = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else False
 
+        for channel in switchOn + switchOff:
+            self.actor.controllers['aten'].getOutlet(channel=channel)
+
         if attenuator and attenuator != self.actor.controllers['labsphere'].attenuator:
             self.actor.controllers['labsphere'].substates.move(cmd=cmd, value=attenuator)
 
