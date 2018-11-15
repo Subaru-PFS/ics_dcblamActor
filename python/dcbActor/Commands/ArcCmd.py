@@ -61,6 +61,8 @@ class ArcCmd(object):
         attenuator = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else False
 
         for channel in switchOn + switchOff:
+            if channel == 'halogen':
+                continue
             self.actor.controllers['aten'].getOutlet(channel=channel)
 
         if attenuator and attenuator != self.actor.controllers['labsphere'].attenuator:
