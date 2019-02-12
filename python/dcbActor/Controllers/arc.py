@@ -36,6 +36,7 @@ class arc(FSMDev, QThread):
                 "xenon": self.controllers["aten"].state["xenon"],
                 "krypton": self.controllers["aten"].state["krypton"],
                 "argon": self.controllers["aten"].state["argon"],
+                "deuterium": self.controllers["aten"].state["deuterium"],
                 "halogen": self.controllers["labsphere"].halogen}
 
     @property
