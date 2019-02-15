@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
 import argparse
+import configparser
 import logging
 
 import actorcore.ICC
+import dcbActor.utils.makeLamDesign as lamConfig
 import numpy as np
 from twisted.internet import reactor
 
@@ -90,6 +92,13 @@ class OurActor(actorcore.ICC.ICC):
 
     def updateStates(self, cmd, onsubstate=False):
         cmd.inform('metaFSM=%s,%s' % (self.state, self.substate))
+
+    def pfsDesignId(self, cmd):
+        conf = configparser.ConfigParser()
+        conf.read_file(open('/software/ait/fiberConfig.cfg'))
+        fibers = [fib.strip() for fib in conf.get('current', 'fibers').split(',')]
+        pfiDesignId = lamConfig.hashColors(fibers)
+        cmd.inform('designId=0x%016x' % pfiDesignId)
 
 
 def main():

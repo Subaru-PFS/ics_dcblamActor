@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 
+import configparser
+
 import opscore.protocols.keys as keys
 import opscore.protocols.types as types
 
@@ -19,7 +21,8 @@ class TopCmd(object):
             ('ping', '', self.ping),
             ('status', '[@all] [<controllers>]', self.status),
             ('monitor', '<controllers> <period>', self.monitor),
-            ('set', '<controller> <mode>', self.changeMode)
+            ('set', '<controller> <mode>', self.changeMode),
+            ('config', '<fibers>', self.configFibers)
         ]
 
         # Define typed command arguments for the above commands.
@@ -34,6 +37,8 @@ class TopCmd(object):
                                                  help='the period to sample at.'),
                                         keys.Key("mode", types.String(),
                                                  help='controller mode'),
+                                        keys.Key("fibers", types.String() * (1, None),
+                                                 help='the names of current fiber bundles'),
                                         )
 
     def monitor(self, cmd):
@@ -86,6 +91,7 @@ class TopCmd(object):
                                                    self.actor.config.sections()))
 
         self.actor.updateStates(cmd=cmd)
+        self.actor.pfsDesignId(cmd=cmd)
 
         if 'all' in cmdKeys:
             for controller in self.actor.controllers:
@@ -118,3 +124,18 @@ class TopCmd(object):
         self.actor.callCommand("%s status" % controller)
 
         cmd.finish()
+
+    def configFibers(self, cmd):
+        cmdKeys = cmd.cmd.keywords
+        fibers = cmdKeys['fibers'].values
+
+        conf = configparser.ConfigParser()
+        conf.read_file(open('/software/ait/fiberConfig.cfg'))
+        strFibers = ','.join([fib.strip() for fib in fibers])
+        conf.set('current', 'fibers', strFibers)
+        conf.write(open('/software/ait/fiberConfig.cfg', 'w'))
+        self.actor.pfsDesignId(cmd=cmd)
+
+        cmd.finish()
+
+
