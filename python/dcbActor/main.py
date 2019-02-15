@@ -97,6 +97,7 @@ class OurActor(actorcore.ICC.ICC):
         conf = configparser.ConfigParser()
         conf.read_file(open('/software/ait/fiberConfig.cfg'))
         fibers = [fib.strip() for fib in conf.get('current', 'fibers').split(',')]
+        cmd.inform('fibers=%s' % ','.join(fibers))
         pfiDesignId = lamConfig.hashColors(fibers)
         cmd.inform('designId=0x%016x' % pfiDesignId)
 
