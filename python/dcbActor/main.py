@@ -99,7 +99,7 @@ class OurActor(actorcore.ICC.ICC):
         fibers = [fib.strip() for fib in conf.get('current', 'fibers').split(',')]
         pfiDesignId = lamConfig.hashColors(fibers)
 
-        cmd.inform('fiberConfig=%s' % ';'.join(fibers))
+        cmd.inform('fiberConfig="%s"' % ';'.join(fibers))
         cmd.inform('designId=0x%016x' % pfiDesignId)
 
 
