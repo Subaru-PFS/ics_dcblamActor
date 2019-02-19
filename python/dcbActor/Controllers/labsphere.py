@@ -21,34 +21,45 @@ class SmoothFlux(object):
     @property
     def values(self):
         values = np.array([val for time, val in self.current])
-
         return values[~np.isnan(values)]
 
     @property
     def median(self):
-        return np.median(self.values)
+        median = np.median(self.values) if self.isCompleted else np.nan
+        return median
 
     @property
     def mean(self):
-        return np.mean(self.values)
+        mean = np.mean(self.values) if self.isCompleted else np.nan
+        return mean
 
     @property
     def std(self):
-        return np.std(self.values)
+        std = np.std(self.values) if self.isCompleted else np.nan
+        return std
+
+    @property
+    def minStd(self):
+        minStd = self.median * 0.02
+        minStd = 0.002 if minStd < 0.002 else minStd
+        return minStd
 
     @property
     def isCompleted(self):
-        return len(self.values) > 6
+        return len(self.values) >= 9
 
     def newFlux(self, value):
+        """Max flux measured is 110 with Qth"""
+        value = value if -0.005 < value < 130 else np.nan
         self.current.append((time.time(), value))
         self.smoothOut()
 
     def smoothOut(self, outdated=30):
-        self.current = [(tstamp, val) for tstamp, val in self.current if (time.time() - tstamp) < outdated]
+        self.current = self.current[-9:]
 
     def clear(self):
         self.current.clear()
+
 
 class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
     def __init__(self, actor, name, loglevel=logging.DEBUG):
@@ -170,6 +181,7 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.persistAttenuator(cmd=cmd, value=255)
 
     def moveAttenuator(self, e):
+        tempo = 3 + abs(e.value - self.attenuator) * 9 / 255
 
         try:
             for cmdStr in labsDrivers.attenuator(e.value):
@@ -177,8 +189,22 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         except:
             self.persistAttenuator(cmd=e.cmd, value=-1)
             self.substates.fail(cmd=e.cmd)
-
             raise
+
+        tlim = time.time() + tempo
+
+        while time.time() < tlim:
+            try:
+                self.checkPhotodiode(cmd=e.cmd)
+            except:
+                pass
+            remainingTime = tlim - time.time()
+            if remainingTime > 0:
+                sleepTime = 2 if remainingTime > 2 else remainingTime
+            else:
+                sleepTime = 0
+
+            time.sleep(sleepTime)
 
         self.persistAttenuator(cmd=e.cmd, value=e.value)
         self.substates.idle(cmd=e.cmd)
@@ -200,18 +226,20 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         cmd.inform('labsphereFSM=%s,%s' % (self.states.current, self.substates.current))
 
         if self.states.current in ['LOADED', 'ONLINE']:
-
-            try:
-                flux = self.photodiode(cmd=cmd)
-            except:
-                flux = np.nan
-                raise
-            finally:
-                self.smoothFlux.newFlux(flux)
-                cmd.inform('flux=%.3f,%.3f' % (self.smoothFlux.median, self.smoothFlux.std))
-                cmd.inform('photodiode=%.3f' % self.smoothFlux.last)
+            self.checkPhotodiode(cmd=cmd)
 
         cmd.finish()
+
+    def checkPhotodiode(self, cmd):
+        try:
+            flux = self.photodiode(cmd=cmd)
+        except:
+            flux = np.nan
+            raise
+        finally:
+            self.smoothFlux.newFlux(flux)
+            cmd.inform('flux=%.3f,%.3f' % (self.smoothFlux.median, self.smoothFlux.std))
+            cmd.inform('photodiode=%.3f' % self.smoothFlux.last)
 
     def photodiode(self, cmd):
         footLamberts = self.sendOneCommand(labsDrivers.photodiode(), cmd=cmd)

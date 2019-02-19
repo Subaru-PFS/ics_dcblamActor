@@ -61,6 +61,7 @@ class arc(FSMDev, QThread):
 
             if not effectiveSwitch:
                 force = True
+
             else:
                 halogen = effectiveSwitch.pop('halogen', None)
                 if halogen is not None:
@@ -69,9 +70,13 @@ class arc(FSMDev, QThread):
                 switchOn = [arc for arc, state in effectiveSwitch.items() if state == 'on']
                 switchOff = [arc for arc, state in effectiveSwitch.items() if state == 'off']
 
-                if switchOn or switchOff:
-                    self.actor.callCommand('power %s %s' % ('on=%s' % ','.join(switchOn) if switchOn else '',
-                                                            'off=%s' % ','.join(switchOff) if switchOff else ''))
+                if switchOn:
+                    self.actor.callCommand('labsphere attenuator=0')
+                    self.actor.callCommand('power on=%s' % ','.join(switchOn))
+
+                if switchOff:
+                    self.actor.callCommand('power off=%s' % ','.join(switchOff))
+
             if not force:
                 self.flux.clear()
 
@@ -79,19 +84,23 @@ class arc(FSMDev, QThread):
                     time.sleep(0.1)
 
                 start = time.time()
-                while not (self.flux.median > 0.01 and self.flux.std < 0.1):
+                while not (self.flux.median > 0.01 and self.flux.std < self.flux.minStd):
                     time.sleep(0.1)
                     if (time.time() - start) > 300:
                         raise TimeoutError('Photodiode flux is null or unstable')
 
-            self.substates.idle(cmd=e.cmd)
-
         except:
-            self.substates.fail(cmd=e.cmd)
             raise
 
         finally:
             self.actor.callCommand('monitor controllers=labsphere period=15')
+            if e.attenuator is not None:
+                self.actor.callCommand('labsphere attenuator=%d' % e.attenuator)
+                time.sleep(1)
+                while self.actor.controllers['labsphere'].substates.current == 'MOVING':
+                    pass
+
+            self.substates.idle(cmd=e.cmd)
 
     def handleTimeout(self):
         if self.exitASAP:

@@ -65,11 +65,12 @@ class ArcCmd(object):
                 continue
             self.actor.controllers['aten'].getOutlet(channel=channel)
 
-        if attenuator is not None and attenuator != self.actor.controllers['labsphere'].attenuator:
-            self.actor.controllers['labsphere'].substates.move(cmd=cmd, value=attenuator)
+        if switchOn:
+            attenuator = self.actor.controllers['labsphere'].attenuator if attenuator is None else attenuator
 
         self.controller.substates.warmup(cmd=cmd,
                                          switchOn=switchOn,
                                          switchOff=switchOff,
-                                         force=force)
+                                         force=force,
+                                         attenuator=attenuator)
         cmd.finish()

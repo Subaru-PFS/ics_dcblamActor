@@ -49,7 +49,8 @@ class LabsphereCmd(object):
         cmdKeys = cmd.cmd.keywords
 
         value = cmdKeys['attenuator'].values[0]
-        self.controller.substates.move(cmd=cmd, value=value)
+        if value != self.controller.attenuator:
+            self.controller.substates.move(cmd=cmd, value=value)
         self.controller.getStatus(cmd)
 
     @threaded
