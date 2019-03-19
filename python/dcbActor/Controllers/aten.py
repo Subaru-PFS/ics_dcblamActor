@@ -2,13 +2,12 @@ __author__ = 'alefur'
 import logging
 import time
 
-import enuActor.Controllers.bufferedSocket as bufferedSocket
-from actorcore.FSM import FSMDev
-from actorcore.QThread import QThread
+import enuActor.utils.bufferedSocket as bufferedSocket
 from dcbActor.Controllers.simulator.aten import Atensim
+from enuActor.utils.fsmThread import FSMThread
 
 
-class aten(FSMDev, QThread, bufferedSocket.EthComm):
+class aten(FSMThread, bufferedSocket.EthComm):
     def __init__(self, actor, name, loglevel=logging.DEBUG):
         """This sets up the connections to/from the hub, the logger, and the twisted reactor.
 
@@ -21,22 +20,17 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
                   {'name': 'fail', 'src': ['SWITCHING', ], 'dst': 'FAILED'},
                   ]
 
-        bufferedSocket.EthComm.__init__(self)
-        QThread.__init__(self, actor, name)
-        FSMDev.__init__(self, actor, name, events=events, substates=substates)
+        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=True)
 
         self.addStateCB('SWITCHING', self.switch)
+        self.state = {}
+
+        self.mode = ''
+        self.sock = None
+        self.sim = None
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
-
-        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n>')
-        self.EOL = '\r\n'
-
-        self.mode = ''
-        self.sim = None
-
-        self.state = {}
 
     @property
     def simulated(self):
@@ -67,14 +61,6 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
     def getOutlet(self, channel):
         return self.actor.config.get('outlets', channel).strip().zfill(2)
 
-    def start(self, cmd=None, doInit=True, mode=None):
-        QThread.start(self)
-        FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
-
-    def stop(self, cmd=None):
-        FSMDev.stop(self, cmd=cmd)
-        self.exit()
-
     def loadCfg(self, cmd, mode=None):
         """| Load Configuration file. called by device.loadDevice()
 
@@ -83,9 +69,11 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         :type mode: str
         :raise: Exception Config file badly formatted
         """
-        self.host = self.actor.config.get('aten', 'host')
-        self.port = int(self.actor.config.get('aten', 'port'))
         self.mode = self.actor.config.get('aten', 'mode') if mode is None else mode
+        bufferedSocket.EthComm.__init__(self,
+                                        host=self.actor.config.get('aten', 'host'),
+                                        port=int(self.actor.config.get('aten', 'port')),
+                                        EOL='\r\n')
 
     def startComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
@@ -94,19 +82,26 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        cmd.inform('atenMode=%s' % self.mode)
-
         self.sim = Atensim()
+
+        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n>')
         s = self.connectSock()
+
+    def getStatus(self, cmd):
+        for channel in [channel for channel in self.actor.config.options('outlets')]:
+            self.checkChannel(cmd=cmd, channel=channel)
+
+        cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
+        cmd.inform('atenVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def switch(self, e):
         toSwitch = dict([(channel, 'on') for channel in e.switchOn] + [(channel, 'off') for channel in e.switchOff])
 
-        labsphere = toSwitch.pop('labsphere', None)
-        if labsphere is not None:
-            toSwitch['pow_attenuator'] = labsphere
-            toSwitch['pow_sphere'] = labsphere
-            toSwitch['pow_halogen'] = labsphere
+        state = toSwitch.pop('labsphere', None)
+        if state is not None:
+            toSwitch['pow_attenuator'] = state
+            toSwitch['pow_sphere'] = state
+            toSwitch['pow_halogen'] = state
 
         try:
             for channel, state in toSwitch.items():
@@ -132,27 +127,6 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
         outlet, state = ret.rsplit(' ', 1)
 
         self.setState(cmd=cmd, channel=self.getChannel(outlet=outlet), state=state)
-
-    def getStatus(self, cmd):
-        cmd.inform('atenMode=%s' % self.mode)
-        cmd.inform('atenFSM=%s,%s' % (self.states.current, self.substates.current))
-
-        channels = [channel for channel in self.actor.config.options('outlets')]
-
-        if self.states.current == 'ONLINE':
-
-            try:
-                for channel in channels:
-                    self.checkChannel(cmd=cmd, channel=channel)
-
-                cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
-                cmd.finish('atenVAW=%s,%s,%s' % self.checkVaw(cmd))
-
-            except:
-                raise
-
-            finally:
-                self.closeSock()
 
     def checkVaw(self, cmd):
 
@@ -240,7 +214,3 @@ class aten(FSMDev, QThread, bufferedSocket.EthComm):
             raise ValueError('Bad password')
 
         return sock
-
-    def handleTimeout(self):
-        if self.exitASAP:
-            raise SystemExit()

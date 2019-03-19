@@ -42,7 +42,7 @@ class LabsphereCmd(object):
     def status(self, cmd):
         """Report status and version; obtain and send current data"""
 
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def moveAttenuator(self, cmd):
@@ -51,13 +51,13 @@ class LabsphereCmd(object):
         value = cmdKeys['attenuator'].values[0]
         if value != self.controller.attenuator:
             self.controller.substates.move(cmd=cmd, value=value)
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def initialise(self, cmd):
 
         self.controller.substates.init(cmd=cmd)
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def switchHalogen(self, cmd):
@@ -66,4 +66,4 @@ class LabsphereCmd(object):
         state = 'on' if 'on' in cmdKeys else 'off'
 
         self.controller.substates.halogen(cmd=cmd, state=state)
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)

@@ -41,7 +41,7 @@ class AtenCmd(object):
     def status(self, cmd):
         """Report status and version; obtain and send current data"""
 
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def switch(self, cmd):
@@ -56,4 +56,4 @@ class AtenCmd(object):
             self.controller.getOutlet(channel=channel)
 
         self.controller.substates.switch(cmd=cmd, switchOn=switchOn, switchOff=switchOff)
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)

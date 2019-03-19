@@ -43,14 +43,9 @@ class TopCmd(object):
 
     def monitor(self, cmd):
         """ Enable/disable/adjust period controller monitors. """
-        cmdKeys = cmd.cmd.keywords
-        period = cmdKeys['period'].values[0]
-        controllers = cmdKeys['controllers'].values
 
-        knownControllers = []
-        for c in self.actor.config.get(self.actor.name, 'controllers').split(','):
-            c = c.strip()
-            knownControllers.append(c)
+        period = cmd.cmd.keywords['period'].values[0]
+        controllers = cmd.cmd.keywords['controllers'].values
 
         knownControllers = [c.strip() for c in self.actor.config.get(self.actor.name, 'controllers').split(',')]
 
@@ -69,8 +64,10 @@ class TopCmd(object):
             cmd.fail('text="no controllers found"')
 
     def controllerKey(self):
+        """Return controllers keyword
+        """
         controllerNames = list(self.actor.controllers.keys())
-        key = 'controllers=%s' % (','.join([c for c in controllerNames]))
+        key = 'controllers=%s' % (','.join([c for c in controllerNames]) if controllerNames else None)
 
         return key
 
@@ -84,7 +81,6 @@ class TopCmd(object):
         """Report camera status and actor version. """
         cmdKeys = cmd.cmd.keywords
         self.actor.sendVersionKey(cmd)
-
         cmd.inform('text=%s' % ("Present!"))
         cmd.inform('text="monitors: %s"' % (self.actor.monitors))
         cmd.inform('text="config id=0x%08x %r"' % (id(self.actor.config),
@@ -137,5 +133,3 @@ class TopCmd(object):
         self.actor.pfsDesignId(cmd=cmd)
 
         cmd.finish()
-
-

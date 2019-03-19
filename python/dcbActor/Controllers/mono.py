@@ -1,14 +1,13 @@
 __author__ = 'alefur'
 import logging
 
-import enuActor.Controllers.bufferedSocket as bufferedSocket
-from actorcore.FSM import FSMDev
-from actorcore.QThread import QThread
+import enuActor.utils.bufferedSocket as bufferedSocket
 from dcbActor.Controllers.simulator.mono import Monosim
+from enuActor.utils.fsmThread import FSMThread
 from opscore.utility.qstr import qstr
 
 
-class mono(FSMDev, QThread, bufferedSocket.EthComm):
+class mono(FSMThread, bufferedSocket.EthComm):
     shutterCode = {'O': 'open', 'C': 'closed'}
 
     def __init__(self, actor, name, loglevel=logging.DEBUG):
@@ -24,23 +23,18 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
                   {'name': 'idle', 'src': ['MOVING', 'OPENING', 'CLOSING'], 'dst': 'IDLE'},
                   {'name': 'fail', 'src': ['MOVING', 'OPENING', 'CLOSING'], 'dst': 'FAILED'},
                   ]
-
-        bufferedSocket.EthComm.__init__(self)
-        QThread.__init__(self, actor, name)
-        FSMDev.__init__(self, actor, name, events=events, substates=substates)
+        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=True)
 
         self.addStateCB('MOVING', self.setGrating)
         self.addStateCB('OPENING', self.openShutter)
         self.addStateCB('CLOSING', self.closeShutter)
 
+        self.mode = ''
+        self.sock = None
+        self.sim = None
+
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
-
-        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=30.0)
-        self.EOL = '\r\n'
-
-        self.mode = ''
-        self.sim = None
 
     @property
     def simulated(self):
@@ -51,25 +45,6 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
-    def start(self, cmd=None, doInit=True, mode=None):
-        QThread.start(self)
-        FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
-
-        try:
-            self.actor.attachController(name='monoqth')
-        except Exception as e:
-            cmd.warn('text="%s' % self.actor.strTraceback(e))
-
-    def stop(self, cmd=None):
-        FSMDev.stop(self, cmd=cmd)
-
-        try:
-            self.actor.detachController(controllerName='monoqth')
-        except Exception as e:
-            cmd.warn('text="%s' % self.actor.strTraceback(e))
-
-        self.exit()
-
     def loadCfg(self, cmd, mode=None):
         """| Load Configuration file. called by device.loadDevice()
 
@@ -78,10 +53,11 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         :type mode: str
         :raise: Exception Config file badly formatted
         """
-
-        self.host = self.actor.config.get('mono', 'host')
-        self.port = int(self.actor.config.get('mono', 'port'))
         self.mode = self.actor.config.get('mono', 'mode') if mode is None else mode
+        bufferedSocket.EthComm.__init__(self,
+                                        host=self.actor.config.get('mono', 'host'),
+                                        port=int(self.actor.config.get('mono', 'port')),
+                                        EOL='\r\n')
 
     def startComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
@@ -90,51 +66,27 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        cmd.inform('monoMode=%s' % self.mode)
-
         self.sim = Monosim()
-        s = self.connectSock()
 
-        status = self.sendOneCommand('status', doClose=True, cmd=cmd)
-        cmd.inform('text=%s' % qstr(status))
+        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=30.0)
+        s = self.connectSock()
+        cmd.inform('text=%s' % qstr(self.sendOneCommand('status', cmd=cmd)))
 
     def getStatus(self, cmd):
-        cmd.inform('monoMode=%s' % self.mode)
-        cmd.inform('monoFSM=%s,%s' % (self.states.current, self.substates.current))
+        error = self.getError(cmd=cmd)
+        shutter = self.getShutter(cmd=cmd)
+        grating = self.getGrating(cmd=cmd)
+        outport = int(self.getOutport(cmd=cmd))
+        wavelength = float(self.getWave(cmd=cmd))
 
-        if self.states.current == 'ONLINE':
-            error = self.getError(cmd=cmd)
-            shutter = self.getShutter(cmd=cmd)
-            grating = self.getGrating(cmd=cmd)
-            outport = int(self.getOutport(cmd=cmd))
-            wavelength = float(self.getWave(cmd=cmd, doClose=True))
-            talk = cmd.inform if error == 'OK' else cmd.warn
-            talk('monoerror=%s' % qstr(error))
-
-            cmd.inform('monograting=%s' % grating)
-            cmd.inform('monochromator=%s,%d,%.3f' % (shutter, outport, wavelength))
-
-        cmd.finish()
-
-    def getError(self, cmd, doClose=False):
-        return self.sendOneCommand('geterror', doClose=doClose, cmd=cmd)
-
-    def getShutter(self, cmd, doClose=False):
-        shutter = self.sendOneCommand('getshutter', doClose=doClose, cmd=cmd)
-        return self.shutterCode[shutter]
-
-    def getGrating(self, cmd, doClose=False):
-        return self.sendOneCommand('getgrating', doClose=doClose, cmd=cmd)
-
-    def getOutport(self, cmd, doClose=False):
-        return self.sendOneCommand('getoutport', doClose=doClose, cmd=cmd)
-
-    def getWave(self, cmd, doClose=False):
-        return self.sendOneCommand('getwave', doClose=doClose, cmd=cmd)
+        gen = cmd.inform if error == 'OK' else cmd.warn
+        gen('monoerror=%s' % qstr(error))
+        gen('monograting=%s' % grating)
+        gen('monochromator=%s,%d,%.3f' % (shutter, outport, wavelength))
 
     def openShutter(self, e):
         try:
-            self.sendOneCommand('shutteropen', doClose=False, cmd=e.cmd)
+            self.sendOneCommand('shutteropen', cmd=e.cmd)
             self.substates.idle(cmd=e.cmd)
         except:
             self.substates.fail(cmd=e.cmd)
@@ -142,7 +94,7 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
 
     def closeShutter(self, e):
         try:
-            self.sendOneCommand('shutterclose', doClose=False, cmd=e.cmd)
+            self.sendOneCommand('shutterclose', cmd=e.cmd)
             self.substates.idle(cmd=e.cmd)
         except:
             self.substates.fail(cmd=e.cmd)
@@ -150,19 +102,35 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
 
     def setGrating(self, e):
         try:
-            self.sendOneCommand('setgrating,%d' % e.gratingId, doClose=False, cmd=e.cmd)
+            self.sendOneCommand('setgrating,%d' % e.gratingId, cmd=e.cmd)
             self.substates.idle(cmd=e.cmd)
         except:
             self.substates.fail(cmd=e.cmd)
             raise
 
-    def setOutport(self, cmd, outportId, doClose=False):
-        self.sendOneCommand('setoutport,%d' % outportId, doClose=doClose, cmd=cmd)
+    def getError(self, cmd):
+        return self.sendOneCommand('geterror', cmd=cmd)
 
-    def setWave(self, cmd, wavelength, doClose=False):
-        self.sendOneCommand('setwave,%.3f' % wavelength, doClose=doClose, cmd=cmd)
+    def getShutter(self, cmd):
+        shutter = self.sendOneCommand('getshutter', cmd=cmd)
+        return self.shutterCode[shutter]
 
-    def sendOneCommand(self, cmdStr, doClose=True, cmd=None):
+    def getGrating(self, cmd):
+        return self.sendOneCommand('getgrating', cmd=cmd)
+
+    def getOutport(self, cmd):
+        return self.sendOneCommand('getoutport', cmd=cmd)
+
+    def getWave(self, cmd):
+        return self.sendOneCommand('getwave', cmd=cmd)
+
+    def setOutport(self, cmd, outportId):
+        self.sendOneCommand('setoutport,%d' % outportId, cmd=cmd)
+
+    def setWave(self, cmd, wavelength):
+        self.sendOneCommand('setwave,%.3f' % wavelength, cmd=cmd)
+
+    def sendOneCommand(self, cmdStr, doClose=False, cmd=None):
         if not self.actor.controllers['aten'].pow_mono == 'on':
             raise UserWarning('monochromator is not powered on')
 
@@ -181,7 +149,3 @@ class mono(FSMDev, QThread, bufferedSocket.EthComm):
             s = bufferedSocket.EthComm.createSock(self)
 
         return s
-
-    def handleTimeout(self):
-        if self.exitASAP:
-            raise SystemExit()

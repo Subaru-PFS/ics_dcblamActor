@@ -2,11 +2,10 @@ import logging
 import time
 
 import dcbActor.Controllers.labsphere_drivers as labsDrivers
-import enuActor.Controllers.bufferedSocket as bufferedSocket
+import enuActor.utils.bufferedSocket as bufferedSocket
 import numpy as np
-from actorcore.FSM import FSMDev
-from actorcore.QThread import QThread
 from dcbActor.Controllers.simulator.labsphere import Labspheresim
+from enuActor.utils.fsmThread import FSMThread
 
 
 class SmoothFlux(object):
@@ -61,7 +60,7 @@ class SmoothFlux(object):
         self.current.clear()
 
 
-class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
+class labsphere(FSMThread, bufferedSocket.EthComm):
     def __init__(self, actor, name, loglevel=logging.DEBUG):
         """This sets up the connections to/from the hub, the logger, and the twisted reactor.
 
@@ -74,29 +73,20 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
                   {'name': 'idle', 'src': ['MOVING', 'WARMING'], 'dst': 'IDLE'},
                   {'name': 'fail', 'src': ['MOVING', 'WARMING'], 'dst': 'FAILED'},
                   ]
-
-        bufferedSocket.EthComm.__init__(self)
-        QThread.__init__(self, actor, name, timeout=4)
-        FSMDev.__init__(self, actor, name, events=events, substates=substates)
+        FSMThread.__init__(self, actor, name, events=events, substates=substates)
 
         self.addStateCB('MOVING', self.moveAttenuator)
         self.addStateCB('WARMING', self.switchHalogen)
-
-        self.logger = logging.getLogger(self.name)
-        self.logger.setLevel(loglevel)
-
-        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=1.0)
-        self.EOL = ''
-        self.sock = None
-
-        self.mode = ''
-        self.sim = None
-
         self.smoothFlux = SmoothFlux()
         self.attenuator = -1
         self.halogen = 'undef'
 
-        self.defaultSamptime = 15
+        self.mode = ''
+        self.sock = None
+        self.sim = None
+
+        self.logger = logging.getLogger(self.name)
+        self.logger.setLevel(loglevel)
 
     @property
     def simulated(self):
@@ -115,25 +105,6 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.attenuator = value
         cmd.inform('attenuator=%i' % value)
 
-    def start(self, cmd=None, doInit=False, mode=None):
-        QThread.start(self)
-        FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
-
-        try:
-            self.actor.attachController(name='arc')
-        except Exception as e:
-            cmd.warn('text="%s' % self.actor.strTraceback(e))
-
-    def stop(self, cmd=None):
-        FSMDev.stop(self, cmd=cmd)
-
-        try:
-            self.actor.detachController(controllerName='arc')
-        except Exception as e:
-            cmd.warn('text="%s' % self.actor.strTraceback(e))
-
-        self.exit()
-
     def loadCfg(self, cmd, mode=None):
         """| Load Configuration file. called by device.loadDevice()
 
@@ -143,9 +114,11 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         :raise: Exception Config file badly formatted
         """
 
-        self.host = self.actor.config.get('labsphere', 'host')
-        self.port = int(self.actor.config.get('labsphere', 'port'))
         self.mode = self.actor.config.get('labsphere', 'mode') if mode is None else mode
+        bufferedSocket.EthComm.__init__(self,
+                                        host=self.actor.config.get('labsphere', 'host'),
+                                        port=int(self.actor.config.get('labsphere', 'port')),
+                                        EOL='')
 
     def startComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
@@ -154,10 +127,9 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        cmd.inform('labsphereMode=%s' % self.mode)
-
         self.sim = Labspheresim(self.actor)
 
+        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=1.0)
         flux = self.photodiode(cmd=cmd)
         self.persistHalogen(cmd=cmd, state='undef')
         self.persistAttenuator(cmd=cmd, value=-1)
@@ -179,6 +151,9 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
 
         self.persistHalogen(cmd=cmd, state='off')
         self.persistAttenuator(cmd=cmd, value=255)
+
+    def getStatus(self, cmd):
+        self.checkPhotodiode(cmd=cmd)
 
     def moveAttenuator(self, e):
         tempo = 3 + abs(e.value - self.attenuator) * 9 / 255
@@ -221,15 +196,6 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         self.persistHalogen(cmd=e.cmd, state=e.state)
         self.substates.idle(cmd=e.cmd)
 
-    def getStatus(self, cmd):
-        cmd.inform('labsphereMode=%s' % self.mode)
-        cmd.inform('labsphereFSM=%s,%s' % (self.states.current, self.substates.current))
-
-        if self.states.current in ['LOADED', 'ONLINE']:
-            self.checkPhotodiode(cmd=cmd)
-
-        cmd.finish()
-
     def checkPhotodiode(self, cmd):
         try:
             flux = self.photodiode(cmd=cmd)
@@ -245,20 +211,15 @@ class labsphere(FSMDev, QThread, bufferedSocket.EthComm):
         footLamberts = self.sendOneCommand(labsDrivers.photodiode(), cmd=cmd)
         return np.round(float(footLamberts) * 3.42626, 3)
 
-    def createSock(self):
-        if self.simulated:
-            s = self.sim
-        else:
-            s = bufferedSocket.EthComm.createSock(self)
-
-        return s
-
     def sendOneCommand(self, *args, **kwargs):
         if self.actor.controllers['aten'].pow_labsphere != 'on':
             raise UserWarning('labsphere is not powered on')
 
         return bufferedSocket.EthComm.sendOneCommand(self, *args, **kwargs)
 
-    def handleTimeout(self):
-        if self.exitASAP:
-            raise SystemExit()
+    def createSock(self):
+        if self.simulated:
+            s = self.sim
+        else:
+            s = bufferedSocket.EthComm.createSock(self)
+        return s

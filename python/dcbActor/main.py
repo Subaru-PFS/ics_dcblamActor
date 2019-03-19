@@ -7,10 +7,12 @@ import logging
 import actorcore.ICC
 import dcbActor.utils.makeLamDesign as lamConfig
 import numpy as np
-from twisted.internet import reactor
 
 
-class OurActor(actorcore.ICC.ICC):
+class DcbActor(actorcore.ICC.ICC):
+    stateList = ['OFF', 'LOADED', 'ONLINE']
+    state2logic = dict([(state, val) for val, state in enumerate(stateList)])
+    logic2state = {v: k for k, v in state2logic.items()}
     def __init__(self, name, productName=None, configFile=None, logLevel=logging.INFO):
         # This sets up the connections to/from the hub, the logger, and the twisted reactor.
         #
@@ -20,77 +22,65 @@ class OurActor(actorcore.ICC.ICC):
         self.logger.setLevel(logLevel)
 
         self.everConnected = False
-        self.onWarmup = False
         self.onsubstate = 'IDLE'
 
-        self.monitors = dict()
+    @property
+    def states(self):
+        return [controller.states.current for controller in self.controllers.values()]
 
-        self.statusLoopCB = self.statusLoop
+    @property
+    def substates(self):
+        return [controller.substates.current for controller in self.controllers.values()]
 
     @property
     def state(self):
-        states = ['OFF', 'LOADED', 'ONLINE']
-        state2logic = dict([(state, val) for val, state in enumerate(states)])
-        logic2state = dict([(val, state) for val, state in enumerate(states)])
-        if self.controllers.values():
-            minLogic = np.min([state2logic[ctrl.states.current] for ctrl in self.controllers.values()])
-            state = logic2state[minLogic]
-        else:
-            state = 'OFF'
+        if not self.controllers.values():
+            return 'OFF'
 
-        return state
+        minLogic = np.min([DcbActor.state2logic[state] for state in self.states])
+        return DcbActor.logic2state[minLogic]
 
     @property
     def substate(self):
+        if not self.controllers.values():
+            return 'IDLE'
 
-        substates = [controller.substates.current for controller in self.controllers.values()]
-        isNotIdle = [substate != 'IDLE' for substate in substates]
-
-        if sum(isNotIdle) == 0:
+        if 'FAILED' in self.substates:
+            substate = 'FAILED'
+        elif list(set(self.substates)) == ['IDLE']:
             substate = 'IDLE'
-        elif sum(isNotIdle) == 1:
-            substate = substates[int(np.argmax(isNotIdle))]
         else:
-            substate = 'BUSY'
+            substate = self.onsubstate
 
         return substate
 
+    @property
+    def monitors(self):
+        return dict([(name, controller.monitor) for name, controller in self.controllers.items()])
+
+    def reloadConfiguration(self, cmd):
+        cmd.inform('sections=%08x,%r' % (id(self.config),
+                                         self.config))
+
     def connectionMade(self):
         if self.everConnected is False:
-            logging.info("Attaching Controllers")
+            logging.info("Attaching all controllers...")
             self.allControllers = [s.strip() for s in self.config.get(self.name, 'startingControllers').split(',')]
             self.attachAllControllers()
             self.everConnected = True
-            logging.info("All Controllers started")
-
-    def statusLoop(self, controller):
-        try:
-            self.callCommand("%s status" % (controller))
-        except:
-            pass
-
-        if self.monitors[controller] > 0:
-            reactor.callLater(self.monitors[controller],
-                              self.statusLoopCB,
-                              controller)
 
     def monitor(self, controller, period, cmd=None):
-        cmd = cmd if cmd is not None else self.bcast
+        cmd = self.bcast if cmd is None else cmd
 
-        if controller not in self.monitors:
-            self.monitors[controller] = 0
+        if controller not in self.controllers:
+            raise ValueError('controller %s is not connected' % controller)
 
-        running = self.monitors[controller] > 0
-        self.monitors[controller] = period
-
-        if (not running) and period > 0:
-
-            cmd.warn('text="starting %gs loop for %s"' % (self.monitors[controller], controller))
-            self.statusLoopCB(controller)
-        else:
-            cmd.warn('text="adjusted %s loop to %gs"' % (controller, self.monitors[controller]))
+        self.controllers[controller].monitor = period
+        cmd.warn('text="setting %s loop to %gs"' % (controller, period))
 
     def updateStates(self, cmd, onsubstate=False):
+        self.onsubstate = onsubstate if onsubstate and onsubstate != 'IDLE' else self.onsubstate
+
         cmd.inform('metaFSM=%s,%s' % (self.state, self.substate))
 
     def pfsDesignId(self, cmd):
@@ -113,7 +103,7 @@ def main():
                         help='identity')
     args = parser.parse_args()
 
-    theActor = OurActor('dcb',
+    theActor = DcbActor('dcb',
                         productName='dcbActor',
                         configFile=args.config,
                         logLevel=args.logLevel)

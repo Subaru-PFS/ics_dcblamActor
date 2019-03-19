@@ -45,14 +45,14 @@ class MonoCmd(object):
     def status(self, cmd):
         """Report status and version; obtain and send current data"""
 
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def initialise(self, cmd):
         """Initialise Bsh, call fsm startInit event """
 
         self.controller.substates.init(cmd=cmd)
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def cmdShutter(self, cmd):
@@ -64,7 +64,7 @@ class MonoCmd(object):
         else:
             self.controller.substates.closeshutter(cmd=cmd)
 
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def setGrating(self, cmd):
@@ -73,7 +73,7 @@ class MonoCmd(object):
         cmdKeys = cmd.cmd.keywords
         gratingId = int(cmdKeys["grating"].values[0])
         self.controller.substates.setgrating(cmd=cmd, gratingId=gratingId)
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def setOutport(self, cmd):
@@ -83,7 +83,7 @@ class MonoCmd(object):
         outportId = int(cmdKeys["outport"].values[0])
 
         self.controller.setOutport(cmd=cmd, outportId=outportId)
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def setWave(self, cmd):
@@ -93,4 +93,4 @@ class MonoCmd(object):
         wavelength = float(cmdKeys["wave"].values[0])
 
         self.controller.setWave(cmd=cmd, wavelength=wavelength)
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)

@@ -39,13 +39,14 @@ class MonoqthCmd(object):
     def status(self, cmd):
         """Report status and version; obtain and send current data"""
 
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)
 
     @threaded
     def error(self, cmd):
         """Report status and version; obtain and send current data"""
 
         self.controller.getError(cmd)
+        cmd.finish()
 
     @threaded
     def switch(self, cmd):
@@ -57,4 +58,4 @@ class MonoqthCmd(object):
         else:
             self.controller.substates.turnoff(cmd=cmd)
 
-        self.controller.getStatus(cmd)
+        self.controller.generate(cmd)

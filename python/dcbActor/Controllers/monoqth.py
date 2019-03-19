@@ -1,17 +1,16 @@
 import logging
 import time
 
-import enuActor.Controllers.bufferedSocket as bufferedSocket
-from actorcore.FSM import FSMDev
-from actorcore.QThread import QThread
+import enuActor.utils.bufferedSocket as bufferedSocket
 from dcbActor.Controllers.simulator.monoqth import Monoqthsim
+from enuActor.utils.fsmThread import FSMThread
 
 
 def getBit(word, ind):
     return not (not (2 ** ind) & word)
 
 
-class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
+class monoqth(FSMThread, bufferedSocket.EthComm):
     STB = {7: 'lamp_on',
            6: 'ext',
            5: 'power_mode',
@@ -44,23 +43,17 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
                   {'name': 'idle', 'src': ['TURNING_OFF', 'WARMING'], 'dst': 'IDLE'},
                   {'name': 'fail', 'src': ['TURNING_OFF', 'WARMING'], 'dst': 'FAILED'},
                   ]
-
-        bufferedSocket.EthComm.__init__(self)
-        QThread.__init__(self, actor, name)
-        FSMDev.__init__(self, actor, name, events=events, substates=substates)
+        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=True)
 
         self.addStateCB('TURNING_OFF', self.turnOff)
         self.addStateCB('WARMING', self.turnOn)
 
-        self.logger = logging.getLogger(self.name)
-        self.logger.setLevel(loglevel)
-
-        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r', timeout=5.0)
-        self.EOL = '\r\n'
         self.sock = None
-
         self.mode = ''
         self.sim = None
+
+        self.logger = logging.getLogger(self.name)
+        self.logger.setLevel(loglevel)
 
     @property
     def simulated(self):
@@ -71,14 +64,6 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
-    def start(self, cmd=None, doInit=True, mode=None):
-        QThread.start(self)
-        FSMDev.start(self, cmd=cmd, doInit=doInit, mode=mode)
-
-    def stop(self, cmd=None):
-        FSMDev.stop(self, cmd=cmd)
-        self.exit()
-
     def loadCfg(self, cmd, mode=None):
         """| Load Configuration file. called by device.loadDevice()
 
@@ -87,10 +72,11 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
         :type mode: str
         :raise: Exception Config file badly formatted
         """
-
-        self.host = self.actor.config.get('monoqth', 'host')
-        self.port = int(self.actor.config.get('monoqth', 'port'))
         self.mode = self.actor.config.get('monoqth', 'mode') if mode is None else mode
+        bufferedSocket.EthComm.__init__(self,
+                                        host=self.actor.config.get('monoqth', 'host'),
+                                        port=int(self.actor.config.get('monoqth', 'port')),
+                                        EOL='\r\n')
 
     def startComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
@@ -99,11 +85,16 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        cmd.inform('monoqthMode=%s' % self.mode)
-
         self.sim = Monoqthsim()
+
+        self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r', timeout=5.0)
         s = self.connectSock()
 
+    def getStatus(self, cmd):
+
+        stb = self.getStb(cmd=cmd)
+        state = 'on' if getBit(stb, 7) else 'off'
+        cmd.inform('monoqth=%s,%d,%d' % (state, stb, self.getEsr(cmd=cmd)))
         cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def turnOn(self, e):
@@ -150,18 +141,6 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
 
         return voltage, current, power
 
-    def getStatus(self, cmd):
-        cmd.inform('monoqthMode=%s' % self.mode)
-        cmd.inform('monoqthFSM=%s,%s' % (self.states.current, self.substates.current))
-
-        if self.states.current == 'ONLINE':
-            stb = self.getStb(cmd=cmd)
-            state = 'on' if getBit(stb, 7) else 'off'
-            cmd.inform('monoqth=%s,%d,%d' % (state, stb, self.getEsr(cmd=cmd)))
-            cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
-
-        cmd.finish()
-
     def getError(self, cmd):
         stb = self.getStb(cmd=cmd)
         esr = self.getEsr(cmd=cmd, doClose=True)
@@ -172,7 +151,13 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
         for ind, val in self.ESR.items():
             cmd.inform('%s=%s' % (val, ('1' if getBit(esr, ind) else '0')))
 
-        cmd.finish()
+
+
+    def sendOneCommand(self, *args, **kwargs):
+        if self.actor.controllers['aten'].pow_mono != 'on':
+            raise UserWarning('monochromator is not powered on')
+
+        return bufferedSocket.EthComm.sendOneCommand(self, *args, **kwargs)
 
     def createSock(self):
         if self.simulated:
@@ -181,13 +166,3 @@ class monoqth(FSMDev, QThread, bufferedSocket.EthComm):
             s = bufferedSocket.EthComm.createSock(self)
 
         return s
-
-    def sendOneCommand(self, *args, **kwargs):
-        if not self.actor.controllers['aten'].pow_mono == 'on':
-            raise UserWarning('monochromator is not powered on')
-
-        return bufferedSocket.EthComm.sendOneCommand(self, *args, **kwargs)
-
-    def handleTimeout(self):
-        if self.exitASAP:
-            raise SystemExit()
