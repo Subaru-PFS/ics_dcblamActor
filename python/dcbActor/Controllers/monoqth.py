@@ -88,7 +88,7 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
         self.sim = Monoqthsim()
 
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r', timeout=5.0)
-        s = self.connectSock()
+        cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def getStatus(self, cmd):
 
@@ -115,7 +115,7 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
 
     def turnQth(self, cmd, bool):
         cmdStr = 'START' if bool else 'STOP'
-        self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
+        self.sendOneCommand(cmdStr, cmd=cmd)
 
         stb = self.getStb(cmd=cmd)
         while getBit(stb, 7) != bool:
@@ -124,26 +124,26 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
             cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def getStb(self, cmd):
-        stb = self.sendOneCommand('STB?', doClose=False, cmd=cmd)
+        stb = self.sendOneCommand('STB?', cmd=cmd)
 
         return int(stb.split('STB')[1], 16)
 
-    def getEsr(self, cmd, doClose=False):
-        esr = self.sendOneCommand('ESR?', doClose=doClose, cmd=cmd)
+    def getEsr(self, cmd):
+        esr = self.sendOneCommand('ESR?', cmd=cmd)
 
         return int(esr.split('ESR')[1], 16)
 
     def checkVaw(self, cmd):
 
-        voltage = self.sendOneCommand('VOLTS?', doClose=False, cmd=cmd)
-        current = self.sendOneCommand('AMPS?', doClose=False, cmd=cmd)
-        power = self.sendOneCommand('WATTS?', doClose=True, cmd=cmd)
+        voltage = self.sendOneCommand('VOLTS?', cmd=cmd)
+        current = self.sendOneCommand('AMPS?', cmd=cmd)
+        power = self.sendOneCommand('WATTS?', cmd=cmd)
 
         return voltage, current, power
 
     def getError(self, cmd):
         stb = self.getStb(cmd=cmd)
-        esr = self.getEsr(cmd=cmd, doClose=True)
+        esr = self.getEsr(cmd=cmd)
 
         for ind, val in self.STB.items():
             cmd.inform('%s=%s' % (val, ('1' if getBit(stb, ind) else '0')))
@@ -151,13 +151,11 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
         for ind, val in self.ESR.items():
             cmd.inform('%s=%s' % (val, ('1' if getBit(esr, ind) else '0')))
 
-
-
-    def sendOneCommand(self, *args, **kwargs):
-        if self.actor.controllers['aten'].pow_mono != 'on':
+    def sendOneCommand(self, cmdStr, doClose=False, cmd=None):
+        if not self.actor.controllers['aten'].pow_mono == 'on':
             raise UserWarning('monochromator is not powered on')
 
-        return bufferedSocket.EthComm.sendOneCommand(self, *args, **kwargs)
+        return bufferedSocket.EthComm.sendOneCommand(self, cmdStr=cmdStr, doClose=doClose, cmd=cmd)
 
     def createSock(self):
         if self.simulated:

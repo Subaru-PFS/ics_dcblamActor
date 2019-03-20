@@ -69,7 +69,6 @@ class mono(FSMThread, bufferedSocket.EthComm):
         self.sim = Monosim()
 
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=30.0)
-        s = self.connectSock()
         cmd.inform('text=%s' % qstr(self.sendOneCommand('status', cmd=cmd)))
 
     def getStatus(self, cmd):

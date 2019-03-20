@@ -85,7 +85,7 @@ class aten(FSMThread, bufferedSocket.EthComm):
         self.sim = Atensim()
 
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n>')
-        s = self.connectSock()
+        cmd.inform('atenVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def getStatus(self, cmd):
         for channel in [channel for channel in self.actor.config.options('outlets')]:
