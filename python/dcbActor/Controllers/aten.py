@@ -43,13 +43,7 @@ class aten(FSMThread, bufferedSocket.EthComm):
 
     @property
     def pow_labsphere(self):
-        logsum = sum([1 if self.state[key] == 'on' else 0 for key in ['pow_attenuator', 'pow_sphere', 'pow_halogen']])
-        if logsum == 3:
-            return 'on'
-        elif logsum == 0:
-            return 'off'
-        else:
-            return 'undef'
+        return self.state['pow_labsphere']
 
     @property
     def pow_mono(self):
@@ -91,17 +85,10 @@ class aten(FSMThread, bufferedSocket.EthComm):
         for channel in [channel for channel in self.actor.config.options('outlets')]:
             self.checkChannel(cmd=cmd, channel=channel)
 
-        cmd.inform('pow_labsphere=%s' % self.pow_labsphere)
         cmd.inform('atenVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def switch(self, e):
         toSwitch = dict([(channel, 'on') for channel in e.switchOn] + [(channel, 'off') for channel in e.switchOff])
-
-        state = toSwitch.pop('labsphere', None)
-        if state is not None:
-            toSwitch['pow_attenuator'] = state
-            toSwitch['pow_sphere'] = state
-            toSwitch['pow_halogen'] = state
 
         try:
             for channel, state in toSwitch.items():

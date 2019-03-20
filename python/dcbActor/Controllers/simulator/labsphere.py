@@ -26,9 +26,9 @@ class Labspheresim(socket.socket):
         cmdStr = cmdStr.decode()
 
         if cmdStr == 'O0X':
-            offset = 3.2 if 'on' in self.actor.arcs.values() else 0
+            offset = 3.2 if 'on' in self.actor.arcs.values() else 0.001
             ratio = (255-self.actor.controllers['labsphere'].attenuator)/255
-            noise = random.gauss(mu=0.0005, sigma=0.005)
+            noise = random.gauss(mu=0.0, sigma=0.0003)
             self.buf.append('%g\r\n' % (ratio * offset + noise))
         else:
             self.buf.append('\r\n')
