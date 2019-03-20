@@ -13,6 +13,7 @@ class DcbActor(actorcore.ICC.ICC):
     stateList = ['OFF', 'LOADED', 'ONLINE']
     state2logic = dict([(state, val) for val, state in enumerate(stateList)])
     logic2state = {v: k for k, v in state2logic.items()}
+
     def __init__(self, name, productName=None, configFile=None, logLevel=logging.INFO):
         # This sets up the connections to/from the hub, the logger, and the twisted reactor.
         #
@@ -23,6 +24,16 @@ class DcbActor(actorcore.ICC.ICC):
 
         self.everConnected = False
         self.onsubstate = 'IDLE'
+
+    @property
+    def arcs(self):
+        return {"neon": self.controllers['aten'].state["neon"],
+                "hgar": self.controllers['aten'].state["hgar"],
+                "xenon": self.controllers['aten'].state["xenon"],
+                "krypton": self.controllers['aten'].state["krypton"],
+                "argon": self.controllers['aten'].state["argon"],
+                "deuterium": self.controllers['aten'].state["deuterium"],
+                "halogen": self.controllers['labsphere'].halogen}
 
     @property
     def states(self):

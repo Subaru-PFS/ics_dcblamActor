@@ -47,7 +47,7 @@ class SmoothFlux(object):
     def isCompleted(self):
         return len(self.values) >= 9
 
-    def newFlux(self, value):
+    def new(self, value):
         """Max flux measured is 110 with Qth"""
         value = value if -0.005 < value < 130 else np.nan
         self.current.append((time.time(), value))
@@ -67,23 +67,27 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         :param actor: spsaitActor
         :param name: controller name
         """
-        substates = ['IDLE', 'MOVING', 'WARMING', 'FAILED']
+        substates = ['IDLE', 'MOVING', 'SWITCHING', 'WARMING', 'FAILED']
         events = [{'name': 'move', 'src': 'IDLE', 'dst': 'MOVING'},
-                  {'name': 'halogen', 'src': 'IDLE', 'dst': 'WARMING'},
-                  {'name': 'idle', 'src': ['MOVING', 'WARMING'], 'dst': 'IDLE'},
-                  {'name': 'fail', 'src': ['MOVING', 'WARMING'], 'dst': 'FAILED'},
+                  {'name': 'halogen', 'src': 'IDLE', 'dst': 'SWITCHING'},
+                  {'name': 'warmup', 'src': 'IDLE', 'dst': 'WARMING'},
+                  {'name': 'idle', 'src': ['MOVING', 'SWITCHING', 'WARMING'], 'dst': 'IDLE'},
+                  {'name': 'fail', 'src': ['MOVING', 'SWITCHING', 'WARMING'], 'dst': 'FAILED'},
                   ]
-        FSMThread.__init__(self, actor, name, events=events, substates=substates)
+        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=True)
 
         self.addStateCB('MOVING', self.moveAttenuator)
-        self.addStateCB('WARMING', self.switchHalogen)
-        self.smoothFlux = SmoothFlux()
+        self.addStateCB('SWITCHING', self.switchHalogen)
+        self.addStateCB('WARMING', self.stabFlux)
+
+        self.flux = SmoothFlux()
         self.attenuator = -1
         self.halogen = 'undef'
 
         self.mode = ''
         self.sock = None
         self.sim = None
+        self.monitor = 15
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
@@ -197,15 +201,53 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         self.substates.idle(cmd=e.cmd)
 
     def checkPhotodiode(self, cmd):
+        flux = np.nan
         try:
             flux = self.photodiode(cmd=cmd)
-        except:
-            flux = np.nan
-            raise
         finally:
-            self.smoothFlux.newFlux(flux)
-            cmd.inform('flux=%.3f,%.3f' % (self.smoothFlux.median, self.smoothFlux.std))
-            cmd.inform('photodiode=%.3f' % self.smoothFlux.last)
+            self.flux.new(flux)
+            cmd.inform('flux=%.3f,%.3f' % (self.flux.median, self.flux.std))
+            cmd.inform('photodiode=%.3f' % self.flux.last)
+
+    def arc(self, cmd, atenOn, atenOff, halogen, force, attenuator):
+        try:
+            if halogen is not None:
+                self.substates.halogen(cmd=cmd, state=halogen)
+
+            powerOn = 'on=%s' % ','.join(atenOn) if atenOn else ''
+            powerOff = 'off=%s' % ','.join(atenOff) if atenOff else ''
+
+            if powerOn or powerOff:
+                cmdVar = self.actor.cmdr.call(actor=self.actor.name,
+                                              cmdStr='power %s %s' % (powerOn, powerOff),
+                                              forUserCmd=cmd,
+                                              timeLim=60)
+
+            if not force:
+                self.substates.move(cmd=cmd, value=0)
+                self.substates.warmup(cmd=cmd)
+
+        finally:
+            if attenuator is not None:
+                self.substates.move(cmd=cmd, value=attenuator)
+
+    def stabFlux(self, e):
+        start = time.time()
+        self.flux.clear()
+
+        while not self.flux.isCompleted and not (self.flux.median > 0.01 and self.flux.std < self.flux.minStd):
+            try:
+                self.checkPhotodiode(cmd=e.cmd)
+            except:
+                pass
+            finally:
+                time.sleep(3)
+
+            if (time.time() - start) > 300:
+                self.substates.fail(cmd=e.cmd)
+                raise TimeoutError('Photodiode flux is null or unstable')
+
+        self.substates.idle(cmd=e.cmd)
 
     def photodiode(self, cmd):
         footLamberts = self.sendOneCommand(labsDrivers.photodiode(), cmd=cmd)

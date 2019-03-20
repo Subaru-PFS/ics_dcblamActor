@@ -22,6 +22,7 @@ class LabsphereCmd(object):
             (self.name, '<attenuator>', self.moveAttenuator),
             (self.name, '@(halogen) @(on|off)', self.switchHalogen),
             (self.name, 'init', self.initialise),
+            ('arc', '[<on>] [<off>] [<attenuator>] [force]', self.switch),
 
         ]
 
@@ -29,6 +30,10 @@ class LabsphereCmd(object):
         self.keys = keys.KeysDictionary("dcb_labsphere", (1, 1),
                                         keys.Key("channel", types.String(), help="which channel to power on"),
                                         keys.Key("attenuator", types.Int(), help="attenuator value"),
+                                        keys.Key("on", types.String() * (1, None),
+                                                 help='which arc lamp to switch on.'),
+                                        keys.Key("off", types.String() * (1, None),
+                                                 help='which arc lamp to switch off.'),
                                         )
 
     @property
@@ -67,3 +72,43 @@ class LabsphereCmd(object):
 
         self.controller.substates.halogen(cmd=cmd, state=state)
         self.controller.generate(cmd)
+
+    @threaded
+    def switch(self, cmd):
+        cmdKeys = cmd.cmd.keywords
+
+        arcOn = cmdKeys['on'].values if 'on' in cmdKeys else []
+        arcOff = cmdKeys['off'].values if 'off' in cmdKeys else []
+
+        force = True if 'force' in cmdKeys else False
+        attenuator = cmdKeys['attenuator'].values[0] if "attenuator" in cmdKeys else None
+
+        for arc in arcOn + arcOff:
+            if arc not in self.actor.arcs.keys():
+                raise KeyError('%s is unknown' % arc)
+
+        switchOn = [(arc, 'on') for arc in arcOn if self.actor.arcs[arc] != 'on']
+        switchOff = [(arc, 'off') for arc in arcOff if self.actor.arcs[arc] != 'off']
+
+        if switchOn:
+            attenuator = self.controller.attenuator if attenuator is None else attenuator
+        else:
+            force = True
+
+        if force:
+            attenuator = None if attenuator == self.controller.attenuator else attenuator
+
+        effectiveSwitch = dict(switchOff + switchOn)
+
+        halogen = effectiveSwitch.pop('halogen', None)
+        atenOn = [arc for arc, state in effectiveSwitch.items() if state == 'on']
+        atenOff = [arc for arc, state in effectiveSwitch.items() if state == 'off']
+
+        self.controller.arc(cmd=cmd,
+                            atenOn=atenOn,
+                            atenOff=atenOff,
+                            halogen=halogen,
+                            force=force,
+                            attenuator=attenuator)
+
+        cmd.finish()
