@@ -88,6 +88,9 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
         self.sim = Monoqthsim()
 
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r', timeout=5.0)
+        self.connectSock()
+
+    def init(self, cmd):
         cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def getStatus(self, cmd):

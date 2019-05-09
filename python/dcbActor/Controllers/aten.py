@@ -79,6 +79,9 @@ class aten(FSMThread, bufferedSocket.EthComm):
         self.sim = Atensim()
 
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n>')
+        self.connectSock()
+
+    def init(self, cmd):
         cmd.inform('atenVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def getStatus(self, cmd):

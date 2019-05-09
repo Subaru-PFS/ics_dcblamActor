@@ -134,7 +134,7 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         self.sim = Labspheresim(self.actor)
 
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=1.0)
-        flux = self.photodiode(cmd=cmd)
+        self.checkPhotodiode(cmd)
         self.persistHalogen(cmd=cmd, state='undef')
         self.persistAttenuator(cmd=cmd, value=-1)
 
@@ -173,11 +173,9 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         tlim = time.time() + tempo
 
         while time.time() < tlim:
-            try:
-                self.checkPhotodiode(cmd=e.cmd)
-            except:
-                pass
+            self.checkPhotodiode(cmd=e.cmd, doRaise=False)
             remainingTime = tlim - time.time()
+
             if remainingTime > 0:
                 sleepTime = 2 if remainingTime > 2 else remainingTime
             else:
@@ -200,10 +198,14 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         self.persistHalogen(cmd=e.cmd, state=e.state)
         self.substates.idle(cmd=e.cmd)
 
-    def checkPhotodiode(self, cmd):
+    def checkPhotodiode(self, cmd, doRaise=True):
         flux = np.nan
         try:
             flux = self.photodiode(cmd=cmd)
+
+        except:
+            if doRaise:
+                raise
         finally:
             self.flux.new(flux)
             cmd.inform('flux=%.3f,%.3f' % (self.flux.median, self.flux.std))
@@ -235,19 +237,21 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         start = time.time()
         self.flux.clear()
 
-        while not self.flux.isCompleted and not (self.flux.median > 0.01 and self.flux.std < self.flux.minStd):
-            try:
-                self.checkPhotodiode(cmd=e.cmd)
-            except:
-                pass
-            finally:
+        try:
+            while not self.flux.isCompleted or not (self.flux.median > 0.01 and self.flux.std < self.flux.minStd):
+
+                self.checkPhotodiode(cmd=e.cmd, doRaise=False)
                 time.sleep(3)
 
-            if (time.time() - start) > 300:
-                self.substates.fail(cmd=e.cmd)
-                raise TimeoutError('Photodiode flux is null or unstable')
+                if (time.time() - start) > 300:
+                    self.substates.idle(cmd=e.cmd)
+                    raise TimeoutError('Photodiode flux is null or unstable')
 
-        self.substates.idle(cmd=e.cmd)
+                if self.exitASAP:
+                    raise SystemExit()
+
+        finally:
+            self.substates.idle(cmd=e.cmd)
 
     def photodiode(self, cmd):
         footLamberts = self.sendOneCommand(labsDrivers.photodiode(), cmd=cmd)
