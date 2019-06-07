@@ -103,28 +103,27 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
     def turnOn(self, e):
         try:
             self.turnQth(cmd=e.cmd, bool=True)
+        finally:
             self.substates.idle(cmd=e.cmd)
-        except:
-            self.substates.fail(cmd=e.cmd)
-            raise
 
     def turnOff(self, e):
         try:
             self.turnQth(cmd=e.cmd, bool=False)
+        finally:
             self.substates.idle(cmd=e.cmd)
-        except:
-            self.substates.fail(cmd=e.cmd)
-            raise
 
     def turnQth(self, cmd, bool):
         cmdStr = 'START' if bool else 'STOP'
         self.sendOneCommand(cmdStr, cmd=cmd)
 
-        stb = self.getStb(cmd=cmd)
-        while getBit(stb, 7) != bool:
+        cond = not bool
+        while cond != bool:
             time.sleep(1)
-            stb = self.getStb(cmd=cmd)
-            cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
+            try:
+                cond = self.getState(cmd)
+                cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
+            except Exception as e:
+                cmd.warn('text=%s' % self.actor.strTraceback(e))
 
     def getStb(self, cmd):
         stb = self.sendOneCommand('STB?', cmd=cmd)
@@ -135,6 +134,10 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
         esr = self.sendOneCommand('ESR?', cmd=cmd)
 
         return int(esr.split('ESR')[1], 16)
+
+    def getState(self, cmd):
+        stb = self.getStb(cmd=cmd)
+        return getBit(stb, 7)
 
     def checkVaw(self, cmd):
 
