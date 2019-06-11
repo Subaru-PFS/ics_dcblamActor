@@ -79,14 +79,11 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         self.addStateCB('MOVING', self.moveAttenuator)
         self.addStateCB('SWITCHING', self.switchHalogen)
         self.addStateCB('WARMING', self.stabFlux)
+        self.sim = Labspheresim(self.actor)
 
         self.flux = SmoothFlux()
         self.attenuator = -1
         self.halogen = 'undef'
-
-        self.mode = ''
-        self.sock = None
-        self.sim = None
         self.monitor = 15
 
         self.logger = logging.getLogger(self.name)
@@ -109,7 +106,7 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         self.attenuator = value
         cmd.inform('attenuator=%i' % value)
 
-    def loadCfg(self, cmd, mode=None):
+    def _loadCfg(self, cmd, mode=None):
         """| Load Configuration file. called by device.loadDevice()
 
         :param cmd: on going command
@@ -124,21 +121,36 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
                                         port=int(self.actor.config.get('labsphere', 'port')),
                                         EOL='')
 
-    def startComm(self, cmd):
+    def _openComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
         | Called by device.loadDevice()
 
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        self.sim = Labspheresim(self.actor)
-
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=1.0)
+        self.connectSock()
+
+    def _closeComm(self, cmd):
+        """| Close communication.
+        | Called by FSMThread.stop()
+
+        :param cmd: on going command
+        """
+        self.closeSock()
+
+    def _testComm(self, cmd):
+        """| test communication
+        | Called by FSMDev.loadDevice()
+
+        :param cmd: on going command,
+        :raise: RuntimeError if the communication has failed with the controller
+        """
         self.checkPhotodiode(cmd, doRaise=True)
         self.persistHalogen(cmd=cmd, state='undef')
         self.persistAttenuator(cmd=cmd, value=-1)
 
-    def init(self, cmd):
+    def _init(self, cmd):
         """| Initialise the interlock board, called y device.initDevice().
 
 
@@ -146,12 +158,12 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         :raise: Exception if a command fail, user if warned with error
         """
         for cmdStr in labsDrivers.init():
-            self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
+            self.sendOneCommand(cmdStr, cmd=cmd)
 
         for cmdStr in labsDrivers.fullClose():
-            self.sendOneCommand(cmdStr, doClose=False, cmd=cmd)
+            self.sendOneCommand(cmdStr, cmd=cmd)
 
-        self.sendOneCommand(labsDrivers.turnQth(state='off'), doClose=False, cmd=cmd)
+        self.sendOneCommand(labsDrivers.turnQth(state='off'), cmd=cmd)
 
         self.persistHalogen(cmd=cmd, state='off')
         self.persistAttenuator(cmd=cmd, value=255)
@@ -159,44 +171,28 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
     def getStatus(self, cmd):
         self.checkPhotodiode(cmd=cmd)
 
-    def moveAttenuator(self, e):
-        tempo = 3 + abs(e.value - self.attenuator) * 9 / 255
+    def moveAttenuator(self, cmd, value):
+        tempo = 3 + abs(value - self.attenuator) * 9 / 255
 
-        try:
-            for cmdStr in labsDrivers.attenuator(e.value):
-                self.sendOneCommand(cmdStr, cmd=e.cmd)
-        except:
-            self.persistAttenuator(cmd=e.cmd, value=-1)
-            self.substates.fail(cmd=e.cmd)
-            raise
+        for cmdStr in labsDrivers.attenuator(value):
+            self.sendOneCommand(cmdStr, cmd=cmd)
 
         tlim = time.time() + tempo
 
         while time.time() < tlim:
-            self.checkPhotodiode(cmd=e.cmd)
+            self.checkPhotodiode(cmd=cmd)
             remainingTime = tlim - time.time()
 
             if remainingTime > 0:
                 sleepTime = 2 if remainingTime > 2 else remainingTime
-            else:
-                sleepTime = 0
+                time.sleep(sleepTime)
 
-            time.sleep(sleepTime)
+        self.persistAttenuator(cmd=cmd, value=value)
 
-        self.persistAttenuator(cmd=e.cmd, value=e.value)
-        self.substates.idle(cmd=e.cmd)
+    def switchHalogen(self, cmd, state):
 
-    def switchHalogen(self, e):
-
-        try:
-            self.sendOneCommand(labsDrivers.turnQth(state=e.state), cmd=e.cmd)
-        except:
-            self.persistHalogen(cmd=e.cmd, state='undef')
-            self.substates.fail(cmd=e.cmd)
-            raise
-
-        self.persistHalogen(cmd=e.cmd, state=e.state)
-        self.substates.idle(cmd=e.cmd)
+        self.sendOneCommand(labsDrivers.turnQth(state=state), cmd=cmd)
+        self.persistHalogen(cmd=cmd, state=state)
 
     def checkPhotodiode(self, cmd, doRaise=False):
         flux = np.nan
@@ -216,7 +212,7 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
     def arc(self, cmd, atenOn, atenOff, halogen, force, attenuator):
         try:
             if halogen is not None:
-                self.substates.halogen(cmd=cmd, state=halogen)
+                self.substates.halogen(cmd, halogen)
 
             powerOn = 'on=%s' % ','.join(atenOn) if atenOn else ''
             powerOff = 'off=%s' % ','.join(atenOff) if atenOff else ''
@@ -228,32 +224,27 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
                                               timeLim=60)
 
             if not force:
-                self.substates.move(cmd=cmd, value=0)
-                self.substates.warmup(cmd=cmd)
+                self.substates.move(cmd, 0)
+                self.substates.warmup(cmd)
 
         finally:
             if attenuator is not None:
-                self.substates.move(cmd=cmd, value=attenuator)
+                self.substates.move(cmd, attenuator)
 
-    def stabFlux(self, e):
+    def stabFlux(self, cmd):
         start = time.time()
         self.flux.clear()
 
-        try:
-            while not self.flux.isCompleted or not (self.flux.median > 0.01 and self.flux.std < self.flux.minStd):
+        while not self.flux.isCompleted or not (self.flux.median > 0.01 and self.flux.std < self.flux.minStd):
 
-                self.checkPhotodiode(cmd=e.cmd)
-                time.sleep(3)
+            self.checkPhotodiode(cmd=cmd)
+            time.sleep(3)
 
-                if (time.time() - start) > 300:
-                    self.substates.idle(cmd=e.cmd)
-                    raise TimeoutError('Photodiode flux is null or unstable')
+            if (time.time() - start) > 300:
+                raise UserWarning('Photodiode flux is null or unstable')
 
-                if self.exitASAP:
-                    raise SystemExit()
-
-        finally:
-            self.substates.idle(cmd=e.cmd)
+            if self.exitASAP:
+                raise SystemExit()
 
     def photodiode(self, cmd, doRaise=False):
         try:
@@ -264,7 +255,6 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
                 raise
             time.sleep(0.5)
             return self.photodiode(cmd=cmd, doRaise=True)
-
 
     def sendOneCommand(self, *args, **kwargs):
         if self.actor.controllers['aten'].pow_labsphere != 'on':

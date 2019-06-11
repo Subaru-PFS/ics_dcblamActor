@@ -47,10 +47,7 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
 
         self.addStateCB('TURNING_OFF', self.turnOff)
         self.addStateCB('WARMING', self.turnOn)
-
-        self.sock = None
-        self.mode = ''
-        self.sim = None
+        self.sim = Monoqthsim()
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
@@ -64,7 +61,7 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
-    def loadCfg(self, cmd, mode=None):
+    def _loadCfg(self, cmd, mode=None):
         """| Load Configuration file. called by device.loadDevice()
 
         :param cmd: on going command
@@ -78,19 +75,25 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
                                         port=int(self.actor.config.get('monoqth', 'port')),
                                         EOL='\r\n')
 
-    def startComm(self, cmd):
+    def _openComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
         | Called by device.loadDevice()
 
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        self.sim = Monoqthsim()
-
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + "IO", EOL='\r', timeout=5.0)
         self.connectSock()
 
-    def init(self, cmd):
+    def _closeComm(self, cmd):
+        """| Close communication.
+        | Called by FSMThread.stop()
+
+        :param cmd: on going command
+        """
+        self.closeSock()
+
+    def _testComm(self, cmd):
         cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def getStatus(self, cmd):
@@ -100,17 +103,11 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
         cmd.inform('monoqth=%s,%d,%d' % (state, stb, self.getEsr(cmd=cmd)))
         cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))
 
-    def turnOn(self, e):
-        try:
-            self.turnQth(cmd=e.cmd, bool=True)
-        finally:
-            self.substates.idle(cmd=e.cmd)
+    def turnOn(self, cmd):
+        self.turnQth(cmd=cmd, bool=True)
 
-    def turnOff(self, e):
-        try:
-            self.turnQth(cmd=e.cmd, bool=False)
-        finally:
-            self.substates.idle(cmd=e.cmd)
+    def turnOff(self, cmd):
+        self.turnQth(cmd=cmd, bool=False)
 
     def turnQth(self, cmd, bool):
         cmdStr = 'START' if bool else 'STOP'
@@ -118,7 +115,7 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
 
         cond = not bool
         while cond != bool:
-            time.sleep(1)
+            time.sleep(2)
             try:
                 cond = self.getState(cmd)
                 cmd.inform('monoqthVAW=%s,%s,%s' % self.checkVaw(cmd))

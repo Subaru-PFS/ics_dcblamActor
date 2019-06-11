@@ -53,5 +53,5 @@ class AtenCmd(object):
         for channel in switchOn + switchOff:
             self.controller.getOutlet(channel=channel)
 
-        self.controller.substates.switch(cmd=cmd, switchOn=switchOn, switchOff=switchOff)
+        self.controller.substates.switch(cmd, switchOn, switchOff)
         self.controller.generate(cmd)

@@ -23,11 +23,9 @@ class aten(FSMThread, bufferedSocket.EthComm):
         FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=True)
 
         self.addStateCB('SWITCHING', self.switch)
-        self.state = {}
+        self.sim = Atensim()
 
-        self.mode = ''
-        self.sock = None
-        self.sim = None
+        self.state = {}
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
@@ -55,7 +53,7 @@ class aten(FSMThread, bufferedSocket.EthComm):
     def getOutlet(self, channel):
         return self.actor.config.get('outlets', channel).strip().zfill(2)
 
-    def loadCfg(self, cmd, mode=None):
+    def _loadCfg(self, cmd, mode=None):
         """| Load Configuration file. called by device.loadDevice()
 
         :param cmd: on going command
@@ -69,19 +67,31 @@ class aten(FSMThread, bufferedSocket.EthComm):
                                         port=int(self.actor.config.get('aten', 'port')),
                                         EOL='\r\n')
 
-    def startComm(self, cmd):
+    def _openComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
         | Called by device.loadDevice()
 
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        self.sim = Atensim()
-
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n>')
         self.connectSock()
 
-    def init(self, cmd):
+    def _closeComm(self, cmd):
+        """| Close communication.
+        | Called by FSMThread.stop()
+
+        :param cmd: on going command
+        """
+        self.closeSock()
+
+    def _testComm(self, cmd):
+        """| test communication
+        | Called by FSMDev.loadDevice()
+
+        :param cmd: on going command,
+        :raise: Exception if the communication has failed with the controller
+        """
         cmd.inform('atenVAW=%s,%s,%s' % self.checkVaw(cmd))
 
     def getStatus(self, cmd):
@@ -90,24 +100,14 @@ class aten(FSMThread, bufferedSocket.EthComm):
 
         cmd.inform('atenVAW=%s,%s,%s' % self.checkVaw(cmd))
 
-    def switch(self, e):
-        toSwitch = dict([(channel, 'on') for channel in e.switchOn] + [(channel, 'off') for channel in e.switchOff])
+    def switch(self, cmd, switchOn, switchOff):
+        toSwitch = dict([(channel, 'on') for channel in switchOn] + [(channel, 'off') for channel in switchOff])
 
-        try:
-            for channel, state in toSwitch.items():
-                cmdStr = "sw o%s %s imme" % (self.getOutlet(channel=channel), state)
-                ret = self.sendOneCommand(cmdStr=cmdStr, cmd=e.cmd, doRaise=False)
-                self.checkChannel(cmd=e.cmd, channel=channel)
-                time.sleep(2)
-
-            self.substates.idle(cmd=e.cmd)
-
-        except:
-            self.substates.fail(cmd=e.cmd)
-            raise
-
-        finally:
-            self.closeSock()
+        for channel, state in toSwitch.items():
+            cmdStr = "sw o%s %s imme" % (self.getOutlet(channel=channel), state)
+            ret = self.sendOneCommand(cmdStr=cmdStr, cmd=cmd, doRaise=False)
+            self.checkChannel(cmd=cmd, channel=channel)
+            time.sleep(2)
 
     def checkChannel(self, cmd, channel):
 

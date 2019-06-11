@@ -55,13 +55,13 @@ class LabsphereCmd(object):
 
         value = cmdKeys['attenuator'].values[0]
         if value != self.controller.attenuator:
-            self.controller.substates.move(cmd=cmd, value=value)
+            self.controller.substates.move(cmd, value)
         self.controller.generate(cmd)
 
     @threaded
     def initialise(self, cmd):
 
-        self.controller.substates.init(cmd=cmd)
+        self.controller.substates.init(cmd)
         self.controller.generate(cmd)
 
     @threaded
@@ -70,7 +70,7 @@ class LabsphereCmd(object):
 
         state = 'on' if 'on' in cmdKeys else 'off'
 
-        self.controller.substates.halogen(cmd=cmd, state=state)
+        self.controller.substates.halogen(cmd, state)
         self.controller.generate(cmd)
 
     @threaded

@@ -51,7 +51,7 @@ class MonoCmd(object):
     def initialise(self, cmd):
         """Initialise Bsh, call fsm startInit event """
 
-        self.controller.substates.init(cmd=cmd)
+        self.controller.substates.init(cmd)
         self.controller.generate(cmd)
 
     @threaded
@@ -60,9 +60,9 @@ class MonoCmd(object):
         cmdKeys = cmd.cmd.keywords
 
         if "open" in cmdKeys:
-            self.controller.substates.openshutter(cmd=cmd)
+            self.controller.substates.openshutter(cmd)
         else:
-            self.controller.substates.closeshutter(cmd=cmd)
+            self.controller.substates.closeshutter(cmd)
 
         self.controller.generate(cmd)
 
@@ -72,7 +72,7 @@ class MonoCmd(object):
 
         cmdKeys = cmd.cmd.keywords
         gratingId = int(cmdKeys["grating"].values[0])
-        self.controller.substates.setgrating(cmd=cmd, gratingId=gratingId)
+        self.controller.substates.setgrating(cmd, gratingId)
         self.controller.generate(cmd)
 
     @threaded

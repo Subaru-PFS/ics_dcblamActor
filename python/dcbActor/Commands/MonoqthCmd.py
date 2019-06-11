@@ -54,8 +54,8 @@ class MonoqthCmd(object):
         cmdKeys = cmd.cmd.keywords
 
         if 'on' in cmdKeys:
-            self.controller.substates.turnon(cmd=cmd)
+            self.controller.substates.turnon(cmd)
         else:
-            self.controller.substates.turnoff(cmd=cmd)
+            self.controller.substates.turnoff(cmd)
 
         self.controller.generate(cmd)

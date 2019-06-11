@@ -28,10 +28,7 @@ class mono(FSMThread, bufferedSocket.EthComm):
         self.addStateCB('MOVING', self.setGrating)
         self.addStateCB('OPENING', self.openShutter)
         self.addStateCB('CLOSING', self.closeShutter)
-
-        self.mode = ''
-        self.sock = None
-        self.sim = None
+        self.sim = Monosim()
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(loglevel)
@@ -45,7 +42,7 @@ class mono(FSMThread, bufferedSocket.EthComm):
         else:
             raise ValueError('unknown mode')
 
-    def loadCfg(self, cmd, mode=None):
+    def _loadCfg(self, cmd, mode=None):
         """| Load Configuration file. called by device.loadDevice()
 
         :param cmd: on going command
@@ -59,20 +56,31 @@ class mono(FSMThread, bufferedSocket.EthComm):
                                         port=int(self.actor.config.get('mono', 'port')),
                                         EOL='\r\n')
 
-    def startComm(self, cmd):
+    def _openComm(self, cmd):
         """| Start socket with the interlock board or simulate it.
         | Called by device.loadDevice()
 
         :param cmd: on going command,
         :raise: Exception if the communication has failed with the controller
         """
-        self.sim = Monosim()
-
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=30.0)
         self.connectSock()
 
-    def init(self, cmd):
-        cmd.inform('text=%s' % qstr(self.sendOneCommand('status', cmd=cmd)))
+    def _closeComm(self, cmd):
+        """| Close communication.
+        | Called by FSMThread.stop()
+
+        :param cmd: on going command
+        """
+        self.closeSock()
+
+    def _testComm(self, cmd):
+        """| test communication
+        | Called by FSMDev.loadDevice()
+
+        :param cmd: on going command,
+        """
+        wavelength = float(self.getWave(cmd=cmd))
 
     def getStatus(self, cmd):
         error = self.getError(cmd=cmd)
@@ -86,29 +94,14 @@ class mono(FSMThread, bufferedSocket.EthComm):
         gen('monograting=%s' % grating)
         gen('monochromator=%s,%d,%.3f' % (shutter, outport, wavelength))
 
-    def openShutter(self, e):
-        try:
-            self.sendOneCommand('shutteropen', cmd=e.cmd)
-            self.substates.idle(cmd=e.cmd)
-        except:
-            self.substates.fail(cmd=e.cmd)
-            raise
+    def openShutter(self, cmd):
+        self.sendOneCommand('shutteropen', cmd=cmd)
 
-    def closeShutter(self, e):
-        try:
-            self.sendOneCommand('shutterclose', cmd=e.cmd)
-            self.substates.idle(cmd=e.cmd)
-        except:
-            self.substates.fail(cmd=e.cmd)
-            raise
+    def closeShutter(self, cmd):
+        self.sendOneCommand('shutterclose', cmd=cmd)
 
-    def setGrating(self, e):
-        try:
-            self.sendOneCommand('setgrating,%d' % e.gratingId, cmd=e.cmd)
-            self.substates.idle(cmd=e.cmd)
-        except:
-            self.substates.fail(cmd=e.cmd)
-            raise
+    def setGrating(self, cmd, gratingId):
+        self.sendOneCommand('setgrating,%d' % gratingId, cmd=cmd)
 
     def getError(self, cmd):
         return self.sendOneCommand('geterror', cmd=cmd)
