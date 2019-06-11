@@ -45,7 +45,7 @@ class SmoothFlux(object):
 
     @property
     def isCompleted(self):
-        return len(self.values) >= 9
+        return len(self.values) >= 8
 
     def new(self, value):
         """Max flux measured is 110 with Qth"""
@@ -134,7 +134,7 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         self.sim = Labspheresim(self.actor)
 
         self.ioBuffer = bufferedSocket.BufferedSocket(self.name + 'IO', EOL='\r\n', timeout=1.0)
-        self.checkPhotodiode(cmd)
+        self.checkPhotodiode(cmd, doRaise=True)
         self.persistHalogen(cmd=cmd, state='undef')
         self.persistAttenuator(cmd=cmd, value=-1)
 
@@ -173,7 +173,7 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         tlim = time.time() + tempo
 
         while time.time() < tlim:
-            self.checkPhotodiode(cmd=e.cmd, doRaise=False)
+            self.checkPhotodiode(cmd=e.cmd)
             remainingTime = tlim - time.time()
 
             if remainingTime > 0:
@@ -198,14 +198,16 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         self.persistHalogen(cmd=e.cmd, state=e.state)
         self.substates.idle(cmd=e.cmd)
 
-    def checkPhotodiode(self, cmd, doRaise=True):
+    def checkPhotodiode(self, cmd, doRaise=False):
         flux = np.nan
         try:
             flux = self.photodiode(cmd=cmd)
 
-        except:
+        except Exception as e:
             if doRaise:
                 raise
+            else:
+                cmd.warn('text=%s' % self.actor.strTraceback(e))
         finally:
             self.flux.new(flux)
             cmd.inform('flux=%.3f,%.3f' % (self.flux.median, self.flux.std))
@@ -240,7 +242,7 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         try:
             while not self.flux.isCompleted or not (self.flux.median > 0.01 and self.flux.std < self.flux.minStd):
 
-                self.checkPhotodiode(cmd=e.cmd, doRaise=False)
+                self.checkPhotodiode(cmd=e.cmd)
                 time.sleep(3)
 
                 if (time.time() - start) > 300:
@@ -253,9 +255,16 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
         finally:
             self.substates.idle(cmd=e.cmd)
 
-    def photodiode(self, cmd):
-        footLamberts = self.sendOneCommand(labsDrivers.photodiode(), cmd=cmd)
-        return np.round(float(footLamberts) * 3.42626, 3)
+    def photodiode(self, cmd, doRaise=False):
+        try:
+            footLamberts = self.sendOneCommand(labsDrivers.photodiode(), cmd=cmd)
+            return np.round(float(footLamberts) * 3.42626, 3)
+        except ValueError:
+            if doRaise:
+                raise
+            time.sleep(0.5)
+            return self.photodiode(cmd=cmd, doRaise=True)
+
 
     def sendOneCommand(self, *args, **kwargs):
         if self.actor.controllers['aten'].pow_labsphere != 'on':
