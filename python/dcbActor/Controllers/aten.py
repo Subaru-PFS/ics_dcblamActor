@@ -41,11 +41,11 @@ class aten(FSMThread, bufferedSocket.EthComm):
 
     @property
     def pow_labsphere(self):
-        return self.state['pow_labsphere']
+        return self.state['labsphere']
 
     @property
     def pow_mono(self):
-        return self.state['pow_mono']
+        return self.state['mono']
 
     def getChannel(self, outlet):
         return {'Outlet %s' % (v.strip()).zfill(2): k for k, v in self.actor.config.items('outlets')}[outlet]
