@@ -22,7 +22,6 @@ class LabsphereCmd(object):
             (self.name, 'status', self.status),
             (self.name, '<attenuator>', self.moveAttenuator),
             (self.name, '@(halogen) @(on|off)', self.switchHalogen),
-            (self.name, 'init', self.initialise),
             ('arc', '[<on>] [<off>] [<attenuator>] [force]', self.switch),
             (self.name, 'stop', self.stop),
             (self.name, 'start [@(operation|simulation)]', self.start),
@@ -59,12 +58,6 @@ class LabsphereCmd(object):
         value = cmdKeys['attenuator'].values[0]
         if value != self.controller.attenuator:
             self.controller.substates.move(cmd, value)
-        self.controller.generate(cmd)
-
-    @blocking
-    def initialise(self, cmd):
-
-        self.controller.substates.init(cmd)
         self.controller.generate(cmd)
 
     @blocking
@@ -143,8 +136,5 @@ class LabsphereCmd(object):
                              port=self.actor.config.get('labsphere', 'port'))
 
         self.actor.connect('labsphere', cmd=cmd, mode=mode)
-
-        cmd.inform('text="labsphere init ..."')
-        self.actor.ownCall(cmd, cmdStr='labsphere init', failMsg='failed to init labsphere')
 
         self.controller.generate(cmd)

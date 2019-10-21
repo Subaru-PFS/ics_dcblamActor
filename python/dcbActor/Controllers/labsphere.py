@@ -74,7 +74,7 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
                   {'name': 'idle', 'src': ['MOVING', 'SWITCHING', 'WARMING'], 'dst': 'IDLE'},
                   {'name': 'fail', 'src': ['MOVING', 'SWITCHING', 'WARMING'], 'dst': 'FAILED'},
                   ]
-        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=False)
+        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=True)
 
         self.addStateCB('MOVING', self.moveAttenuator)
         self.addStateCB('SWITCHING', self.switchHalogen)
@@ -246,15 +246,15 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
             if self.exitASAP:
                 raise SystemExit()
 
-    def photodiode(self, cmd, doRaise=False):
+    def photodiode(self, cmd, niter=0):
         try:
             footLamberts = self.sendOneCommand(labsDrivers.photodiode(), cmd=cmd)
             return np.round(float(footLamberts) * 3.42626, 3)
         except ValueError:
-            if doRaise:
+            if niter > 5:
                 raise
-            time.sleep(0.5)
-            return self.photodiode(cmd=cmd, doRaise=True)
+            time.sleep(1)
+            return self.photodiode(cmd=cmd, niter=niter + 1)
 
     def createSock(self):
         if self.simulated:
