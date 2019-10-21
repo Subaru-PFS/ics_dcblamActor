@@ -2,7 +2,7 @@ import logging
 import time
 
 import enuActor.utils.bufferedSocket as bufferedSocket
-from dcbActor.Controllers.simulator.monoqth import Monoqthsim
+from dcbActor.Simulators.monoqth import Monoqthsim
 from enuActor.utils.fsmThread import FSMThread
 
 

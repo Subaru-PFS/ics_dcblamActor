@@ -2,7 +2,7 @@ __author__ = 'alefur'
 import logging
 
 import enuActor.utils.bufferedSocket as bufferedSocket
-from dcbActor.Controllers.simulator.mono import Monosim
+from dcbActor.Simulators.mono import Monosim
 from enuActor.utils.fsmThread import FSMThread
 from opscore.utility.qstr import qstr
 

@@ -4,7 +4,7 @@ import time
 import dcbActor.Controllers.labsphere_drivers as labsDrivers
 import enuActor.utils.bufferedSocket as bufferedSocket
 import numpy as np
-from dcbActor.Controllers.simulator.labsphere import Labspheresim
+from dcbActor.Simulators.labsphere import Labspheresim
 from enuActor.utils.fsmThread import FSMThread
 
 
