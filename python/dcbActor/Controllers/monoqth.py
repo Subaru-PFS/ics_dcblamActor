@@ -154,12 +154,6 @@ class monoqth(FSMThread, bufferedSocket.EthComm):
         for ind, val in self.ESR.items():
             cmd.inform('%s=%s' % (val, ('1' if getBit(esr, ind) else '0')))
 
-    def sendOneCommand(self, cmdStr, doClose=False, cmd=None):
-        if not self.actor.controllers['aten'].pow_mono == 'on':
-            raise UserWarning('monochromator is not powered on')
-
-        return bufferedSocket.EthComm.sendOneCommand(self, cmdStr=cmdStr, doClose=doClose, cmd=cmd)
-
     def createSock(self):
         if self.simulated:
             s = self.sim

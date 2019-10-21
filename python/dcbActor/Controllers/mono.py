@@ -23,7 +23,7 @@ class mono(FSMThread, bufferedSocket.EthComm):
                   {'name': 'idle', 'src': ['MOVING', 'OPENING', 'CLOSING'], 'dst': 'IDLE'},
                   {'name': 'fail', 'src': ['MOVING', 'OPENING', 'CLOSING'], 'dst': 'FAILED'},
                   ]
-        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=True)
+        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=False)
 
         self.addStateCB('MOVING', self.setGrating)
         self.addStateCB('OPENING', self.openShutter)
@@ -126,9 +126,6 @@ class mono(FSMThread, bufferedSocket.EthComm):
         self.sendOneCommand('setwave,%.3f' % wavelength, cmd=cmd)
 
     def sendOneCommand(self, cmdStr, doClose=False, cmd=None):
-        if not self.actor.controllers['aten'].pow_mono == 'on':
-            raise UserWarning('monochromator is not powered on')
-
         reply = bufferedSocket.EthComm.sendOneCommand(self, cmdStr=cmdStr, doClose=doClose, cmd=cmd)
         error, ret = reply.split(',', 1)
 

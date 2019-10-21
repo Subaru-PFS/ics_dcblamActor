@@ -74,7 +74,7 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
                   {'name': 'idle', 'src': ['MOVING', 'SWITCHING', 'WARMING'], 'dst': 'IDLE'},
                   {'name': 'fail', 'src': ['MOVING', 'SWITCHING', 'WARMING'], 'dst': 'FAILED'},
                   ]
-        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=True)
+        FSMThread.__init__(self, actor, name, events=events, substates=substates, doInit=False)
 
         self.addStateCB('MOVING', self.moveAttenuator)
         self.addStateCB('SWITCHING', self.switchHalogen)
@@ -255,12 +255,6 @@ class labsphere(FSMThread, bufferedSocket.EthComm):
                 raise
             time.sleep(0.5)
             return self.photodiode(cmd=cmd, doRaise=True)
-
-    def sendOneCommand(self, *args, **kwargs):
-        if self.actor.controllers['aten'].pow_labsphere != 'on':
-            raise UserWarning('labsphere is not powered on')
-
-        return bufferedSocket.EthComm.sendOneCommand(self, *args, **kwargs)
 
     def createSock(self):
         if self.simulated:

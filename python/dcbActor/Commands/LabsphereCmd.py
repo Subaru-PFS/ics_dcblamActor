@@ -3,7 +3,8 @@
 
 import opscore.protocols.keys as keys
 import opscore.protocols.types as types
-from enuActor.utils.wrap import threaded
+from enuActor.utils import waitForTcpServer
+from enuActor.utils.wrap import threaded, blocking, singleShot
 
 
 class LabsphereCmd(object):
@@ -23,6 +24,8 @@ class LabsphereCmd(object):
             (self.name, '@(halogen) @(on|off)', self.switchHalogen),
             (self.name, 'init', self.initialise),
             ('arc', '[<on>] [<off>] [<attenuator>] [force]', self.switch),
+            (self.name, 'stop', self.stop),
+            (self.name, 'start [@(operation|simulation)]', self.start),
 
         ]
 
@@ -49,7 +52,7 @@ class LabsphereCmd(object):
 
         self.controller.generate(cmd)
 
-    @threaded
+    @blocking
     def moveAttenuator(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
@@ -58,13 +61,13 @@ class LabsphereCmd(object):
             self.controller.substates.move(cmd, value)
         self.controller.generate(cmd)
 
-    @threaded
+    @blocking
     def initialise(self, cmd):
 
         self.controller.substates.init(cmd)
         self.controller.generate(cmd)
 
-    @threaded
+    @blocking
     def switchHalogen(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
@@ -73,7 +76,7 @@ class LabsphereCmd(object):
         self.controller.substates.halogen(cmd, state)
         self.controller.generate(cmd)
 
-    @threaded
+    @blocking
     def switch(self, cmd):
         cmdKeys = cmd.cmd.keywords
 
@@ -112,3 +115,36 @@ class LabsphereCmd(object):
                             attenuator=attenuator)
 
         cmd.finish()
+
+    @singleShot
+    def stop(self, cmd):
+        """ stop current motion, save hexapod position, power off hxp controller and disconnect"""
+        self.actor.disconnect('labsphere', cmd=cmd)
+
+        cmd.inform('text="powering down labsphere controller ..."')
+        self.actor.ownCall(cmd, cmdStr='power off=labsphere', failMsg='failed to power off labsphere controller')
+
+        cmd.finish()
+
+    @singleShot
+    def start(self, cmd):
+        """ power on hxp controller, connect labsphere controller, and init"""
+        cmdKeys = cmd.cmd.keywords
+        mode = self.actor.config.get('labsphere', 'mode')
+        mode = 'operation' if 'operation' in cmdKeys else mode
+        mode = 'simulation' if 'simulation' in cmdKeys else mode
+
+        cmd.inform('text="powering up labsphere controller ..."')
+        self.actor.ownCall(cmd, cmdStr='power on=labsphere', failMsg='failed to power on labsphere controller')
+
+        if mode == 'operation':
+            cmd.inform('text="waiting for tcp server ..."')
+            waitForTcpServer(host=self.actor.config.get('labsphere', 'host'),
+                             port=self.actor.config.get('labsphere', 'port'))
+
+        self.actor.connect('labsphere', cmd=cmd, mode=mode)
+
+        cmd.inform('text="labsphere init ..."')
+        self.actor.ownCall(cmd, cmdStr='labsphere init', failMsg='failed to init labsphere')
+
+        self.controller.generate(cmd)

@@ -21,7 +21,6 @@ class TopCmd(object):
             ('ping', '', self.ping),
             ('status', '[@all] [<controllers>]', self.status),
             ('monitor', '<controllers> <period>', self.monitor),
-            ('set', '<controller> <mode>', self.changeMode),
             ('config', '<fibers>', self.configFibers)
         ]
 
@@ -35,8 +34,6 @@ class TopCmd(object):
                                                  help='the names a controller.'),
                                         keys.Key("period", types.Int(),
                                                  help='the period to sample at.'),
-                                        keys.Key("mode", types.String(),
-                                                 help='controller mode'),
                                         keys.Key("fibers", types.String() * (1, None),
                                                  help='the names of current fiber bundles'),
                                         )
@@ -97,29 +94,6 @@ class TopCmd(object):
                 self.actor.callCommand("%s status" % controller)
 
         cmd.finish(self.controllerKey())
-
-    def changeMode(self, cmd):
-        """Change device mode operation|simulation"""
-        cmdKeys = cmd.cmd.keywords
-
-        controller = cmdKeys['controller'].values[0]
-        mode = cmdKeys['mode'].values[0]
-
-        knownControllers = [c.strip() for c in self.actor.config.get(self.actor.name, 'controllers').split(',')]
-
-        if controller not in knownControllers:
-            raise ValueError('unknown controller')
-
-        if mode not in ['operation', 'simulation']:
-            raise ValueError('unknown mode')
-
-        self.actor.attachController(name=controller,
-                                    cmd=cmd,
-                                    mode=mode)
-
-        self.actor.callCommand("%s status" % controller)
-
-        cmd.finish()
 
     def configFibers(self, cmd):
         cmdKeys = cmd.cmd.keywords

@@ -3,8 +3,8 @@
 
 import opscore.protocols.keys as keys
 import opscore.protocols.types as types
-from enuActor.utils.wrap import threaded
-
+from enuActor.utils import waitForTcpServer
+from enuActor.utils.wrap import threaded, blocking, singleShot
 
 class MonoCmd(object):
     def __init__(self, actor):
@@ -24,6 +24,8 @@ class MonoCmd(object):
             (self.name, '@(set) <grating>', self.setGrating),
             (self.name, '@(set) <outport>', self.setOutport),
             (self.name, '@(set) <wave>', self.setWave),
+            (self.name, 'stop', self.stop),
+            (self.name, 'start [@(operation|simulation)]', self.start),
 
         ]
 
@@ -47,14 +49,14 @@ class MonoCmd(object):
 
         self.controller.generate(cmd)
 
-    @threaded
+    @blocking
     def initialise(self, cmd):
         """Initialise Bsh, call fsm startInit event """
 
         self.controller.substates.init(cmd)
         self.controller.generate(cmd)
 
-    @threaded
+    @blocking
     def cmdShutter(self, cmd):
         """Open/close , optional keyword force to force transition (without breaking interlock)"""
         cmdKeys = cmd.cmd.keywords
@@ -66,7 +68,7 @@ class MonoCmd(object):
 
         self.controller.generate(cmd)
 
-    @threaded
+    @blocking
     def setGrating(self, cmd):
         """Update bia parameters """
 
@@ -75,7 +77,7 @@ class MonoCmd(object):
         self.controller.substates.setgrating(cmd, gratingId)
         self.controller.generate(cmd)
 
-    @threaded
+    @blocking
     def setOutport(self, cmd):
         """Update bia parameters """
 
@@ -85,7 +87,7 @@ class MonoCmd(object):
         self.controller.setOutport(cmd=cmd, outportId=outportId)
         self.controller.generate(cmd)
 
-    @threaded
+    @blocking
     def setWave(self, cmd):
         """Update bia parameters """
 
@@ -93,4 +95,40 @@ class MonoCmd(object):
         wavelength = float(cmdKeys["wave"].values[0])
 
         self.controller.setWave(cmd=cmd, wavelength=wavelength)
+        self.controller.generate(cmd)
+
+    @singleShot
+    def stop(self, cmd):
+        """ stop current motion, save hexapod position, power off hxp controller and disconnect"""
+        self.actor.disconnect('mono', cmd=cmd)
+        self.actor.disconnect('monoqth', cmd=cmd)
+
+        cmd.inform('text="powering down mono controller ..."')
+        self.actor.ownCall(cmd, cmdStr='power off=mono', failMsg='failed to power off mono controller')
+
+        cmd.finish()
+
+    @singleShot
+    def start(self, cmd):
+        """ power on hxp controller, connect mono controller, and init"""
+        cmdKeys = cmd.cmd.keywords
+        mode = self.actor.config.get('mono', 'mode')
+        mode = 'operation' if 'operation' in cmdKeys else mode
+        mode = 'simulation' if 'simulation' in cmdKeys else mode
+
+        cmd.inform('text="powering up mono controller ..."')
+        self.actor.ownCall(cmd, cmdStr='power on=mono', failMsg='failed to power on mono controller')
+
+        if mode == 'operation':
+            cmd.inform('text="waiting for tcp server ..."')
+            waitForTcpServer(host=self.actor.config.get('mono', 'host'),
+                             port=self.actor.config.get('mono', 'port'))
+
+        self.actor.connect('mono', cmd=cmd, mode=mode)
+
+        cmd.inform('text="mono init ..."')
+        self.actor.ownCall(cmd, cmdStr='mono init', failMsg='failed to init mono')
+
+        self.actor.connect('monoqth', cmd=cmd, mode=mode)
+
         self.controller.generate(cmd)
